@@ -1,108 +1,111 @@
 :root {
     --primary: #005EB8;
     --success: #43A047;
-    --bg: #f0f0f5;
-    --board-bg: #e0e0e0;
-    --hole: #333;
+    --bg: #f4f4f9;
+    --header-bg: #ffffff;
+    --border: #ccc;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 
 body { height: 100vh; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
 
-/* Header Styles */
-header { background: white; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 20; flex-shrink: 0; }
-.top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-h1 { font-size: 1.1rem; color: var(--primary); margin: 0; font-weight: 800; }
-.sub-text { font-size: 0.8rem; color: #666; }
-
-.btn-small { padding: 6px 10px; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
-.btn-primary { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: bold; cursor: pointer; }
-.btn-secondary { padding: 8px 12px; background: #fff; border: 1px solid #333; border-radius: 4px; cursor: pointer; font-weight: bold; }
-
-/* Navigation */
-.bay-scroller { display: flex; overflow-x: auto; gap: 8px; padding-bottom: 4px; }
-.bay-btn { 
-    padding: 8px 16px; background: #ddd; border: none; border-radius: 20px; 
-    white-space: nowrap; font-weight: bold; color: #555; cursor: pointer; flex-shrink: 0;
+/* --- HEADER LAYOUT --- */
+header {
+    background: var(--header-bg);
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 100;
+    flex-shrink: 0;
 }
-.bay-btn.active { background: var(--primary); color: white; box-shadow: 0 2px 5px rgba(0,94,184,0.4); }
 
-/* Progress Bar */
-.progress-container { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
-.progress-fill { height: 100%; background: var(--success); width: 0%; transition: 0.3s ease; }
-.progress-label { text-align: right; font-size: 0.75rem; color: #666; margin-top: 2px; }
+.top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.store-label { font-weight: 800; font-size: 1rem; color: var(--primary); }
+.btn-mini { padding: 4px 8px; border: 1px solid #999; background: #fff; border-radius: 4px; font-size: 0.75rem; }
 
-/* Main Canvas */
-main { flex: 1; overflow: auto; position: relative; background: #888; display: flex; justify-content: center; }
+.tool-row { margin-bottom: 6px; }
+.btn-scan-big { 
+    width: 100%; padding: 10px; 
+    background: var(--primary); color: white; 
+    border: none; border-radius: 4px; 
+    font-weight: bold; font-size: 1rem;
+    display: flex; justify-content: center; align-items: center; gap: 8px;
+}
 
-/* The Pegboard */
+.search-row { display: flex; gap: 5px; margin-bottom: 5px; }
+#search-input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+.btn-search { padding: 0 15px; background: #333; color: white; border: none; border-radius: 4px; font-weight: bold; }
+
+.debug-text { font-size: 0.7rem; color: #d32f2f; text-align: center; margin-bottom: 5px; font-family: monospace; }
+
+.nav-row { display: flex; justify-content: space-between; align-items: center; background: #eee; border-radius: 4px; padding: 4px; margin-bottom: 5px; }
+.nav-arrow { width: 40px; height: 30px; background: white; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; font-size: 1.2rem; line-height: 1; }
+#bay-indicator { font-weight: bold; color: #333; }
+
+.progress-container { height: 4px; background: #ddd; width: 100%; }
+.progress-fill { height: 100%; background: var(--success); width: 0%; transition: 0.3s; }
+.progress-label { text-align: right; font-size: 0.7rem; color: #666; }
+
+/* --- MAIN CANVAS --- */
+main { 
+    flex: 1; 
+    overflow-y: auto; /* Vertical Scroll only */
+    overflow-x: hidden; /* Prevent horizontal scroll, we scale to fit */
+    position: relative; 
+    background: #444; /* Dark background behind board */
+    display: flex;
+    justify-content: center;
+}
+
 #grid-view-container {
     position: relative;
-    background-color: var(--board-bg);
-    /* Realistic Pegboard Pattern: 1 inch grid */
-    background-image: radial-gradient(var(--hole) 15%, transparent 16%);
-    background-size: 16px 16px; /* 16px represents 1 inch visually */
-    box-shadow: 0 0 15px rgba(0,0,0,0.5);
-    margin: 20px;
-    transform-origin: top left;
+    background-color: #e0e0e0;
+    /* 1-inch grid lines */
+    background-image: 
+        linear-gradient(#ccc 1px, transparent 1px),
+        linear-gradient(90deg, #ccc 1px, transparent 1px);
+    /* Size set dynamically via JS */
+    box-shadow: 0 0 20px black;
+    margin-top: 10px;
+    transform-origin: top center;
 }
 
-/* Product Item on Board */
+/* Product Box */
 .product-box {
     position: absolute;
     background: white;
     border: 1px solid #999;
     display: flex; justify-content: center; align-items: flex-start;
-    overflow: hidden; cursor: pointer; z-index: 2;
-    box-shadow: 2px 3px 5px rgba(0,0,0,0.2);
-    transition: transform 0.1s, border 0.1s;
+    overflow: hidden; cursor: pointer; z-index: 10;
     border-radius: 2px;
+    box-sizing: border-box;
 }
 .product-box img { width: 100%; height: 100%; object-fit: contain; }
-.product-box.completed { opacity: 0.5; filter: grayscale(100%); border: 2px solid var(--success); background: #e8f5e9; }
-.product-box.highlight { border: 3px solid orange; z-index: 10; transform: scale(1.05); box-shadow: 0 0 15px yellow; }
+.product-box.completed { opacity: 0.3; filter: grayscale(100%); border: 1px solid var(--success); background: #e8f5e9; }
+.product-box.highlight { border: 3px solid #ff00ea; z-index: 20; box-shadow: 0 0 15px #ff00ea; transform: scale(1.1); opacity: 1 !important;}
 
-/* The Frog Indicator (Red Dot) */
+/* The Frog Dot */
 .frog-dot {
     position: absolute;
-    width: 8px; height: 8px;
-    background-color: red;
+    width: 6px; height: 6px;
+    background: red;
     border-radius: 50%;
     z-index: 5;
-    box-shadow: 0 0 0 1px white;
     pointer-events: none;
-    transform: translate(-50%, -50%); /* Centers dot on the hole coordinates */
+    transform: translate(-50%, -50%);
 }
-
-/* Footer */
-.footer-bar {
-    background: white; padding: 10px; display: flex; gap: 10px;
-    border-top: 1px solid #ddd; z-index: 30; flex-shrink: 0;
-}
-.input-box { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; text-align: center; margin: 15px 0; }
-#search-input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
-.btn-scan { padding: 0 20px; background: var(--primary); color: white; border: none; border-radius: 4px; font-size: 1.4rem; cursor: pointer; }
 
 /* Modals */
-.modal-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.9); z-index: 1000;
-    display: flex; justify-content: center; align-items: center;
-}
+.modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.9); z-index: 2000; display: flex; justify-content: center; align-items: center; }
 .hidden { display: none !important; }
-.modal-card { background: white; padding: 25px; border-radius: 8px; width: 90%; max-width: 350px; text-align: center; }
-.error { color: red; margin-top: 10px; font-weight: bold; }
-
-/* PDF Viewer */
-.pdf-card { width: 95%; height: 90%; padding: 0; display: flex; flex-direction: column; max-width: 800px; }
-.modal-header { padding: 10px; background: #eee; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; }
-#pdf-frame { flex: 1; border: none; width: 100%; background: #eee; }
-
-/* Scanner */
-.scanner-wrapper { width: 100%; max-width: 500px; padding: 10px; background: white; border-radius: 8px; }
-#reader { width: 100%; background: black; min-height: 300px; }
-
-/* Spinner */
+.modal-card { background: white; padding: 20px; width: 90%; max-width: 350px; border-radius: 8px; text-align: center; }
+.input-box { width: 100%; padding: 12px; font-size: 1.2rem; text-align: center; margin: 15px 0; border: 2px solid #ccc; }
+.btn-primary { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; font-size: 1rem; font-weight: bold; }
+.error { color: red; margin-top: 10px; }
 .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 15px auto; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* PDF */
+.pdf-card { width: 98%; height: 95%; padding: 0; display: flex; flex-direction: column; }
+.modal-header { padding: 10px; background: #eee; display: flex; justify-content: space-between; align-items: center; }
+#pdf-frame { flex: 1; width: 100%; border: none; }
