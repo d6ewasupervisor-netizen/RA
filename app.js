@@ -1,396 +1,356 @@
-// --- CONFIGURATION ---
-const REPO_BASE = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + "/";
-const SCALE = 14; // Pixels per inch (Matches CSS background-size)
-// Physical dimensions in holes (4ft wide x standard height)
-const BOARD_W_HOLES = 48; 
-const BOARD_H_HOLES = 72; 
+// STATE MANAGEMENT
+const state = {
+    storeMapping: [],
+    allData: [],
+    githubFiles: [],
+    pogData: [],
+    currentStore: null,
+    currentPOG: null,
+    currentBay: 1,
+    totalBays: 1,
+    completedUPCs: JSON.parse(localStorage.getItem('harpa_completed_upcs')) || [],
+    ppu: 0 // Pixels Per Unit (Inch)
+};
 
-// --- GLOBAL STATE ---
-let fileIndex = [];
-let pogData = [];
-let storeMap = [];
-let currentStore = null;
-let currentPOG = null;
-let currentBay = 1;
-let allBays = [];
-let html5QrCode = null;
-let completedItems = new Set(JSON.parse(localStorage.getItem('harpa_complete') || "[]"));
+const CONFIG = {
+    boardWidthInches: 48, // Standard 4ft section
+    boardHeightInches: 72, // Approximate usable height
+    cols: 46,
+    rows: 64
+};
 
-// --- HELPER: STRIP LEADING ZEROS ---
-function normalizeUPC(upc) {
-    if (!upc) return "";
-    // Convert to string, trim whitespace, remove ALL leading zeros
-    return upc.toString().trim().replace(/^0+/, '');
-}
+// DOM ELEMENTS
+const els = {
+    workspace: document.getElementById('workspace'),
+    pegboard: document.getElementById('pegboard'),
+    modalStore: document.getElementById('modal-store'),
+    modalPdf: document.getElementById('modal-pdf'),
+    modalScanner: document.getElementById('modal-scanner'),
+    pdfFrame: document.getElementById('pdf-frame'),
+    dispStore: document.getElementById('disp-store'),
+    dispPog: document.getElementById('disp-pog'),
+    dispBay: document.getElementById('disp-bay'),
+    progressFill: document.getElementById('progress-fill'),
+    scannerDebug: document.getElementById('scanner-debug'),
+    inputStore: document.getElementById('input-store-login'),
+    swipeOverlay: document.getElementById('swipe-overlay')
+};
 
-// --- INITIALIZATION ---
-document.addEventListener('DOMContentLoaded', () => {
-    init();
-    setupSwipe();
+// 1. INITIALIZATION
+window.addEventListener('DOMContentLoaded', () => {
+    calculatePPU();
+    loadCSVData();
+    setupEventListeners();
 });
 
-async function init() {
-    try {
-        await loadCSVData();
-        document.getElementById('loading-overlay').classList.add('hidden');
-
-        const savedStore = localStorage.getItem('harpa_store');
-        if (savedStore) {
-            loadStoreLogic(savedStore);
-        } else {
-            document.getElementById('store-modal').classList.remove('hidden');
-        }
-    } catch (error) {
-        alert("Error loading data: " + error.message);
-    }
-
-    // Buttons
-    document.getElementById('btn-load-store').onclick = () => {
-        loadStoreLogic(document.getElementById('store-input').value.trim());
-    };
+function calculatePPU() {
+    // Fit 48 inches into screen width
+    const screenWidth = window.innerWidth;
+    state.ppu = (screenWidth - 4) / CONFIG.boardWidthInches; // -4 for borders
     
-    document.getElementById('btn-scan-toggle').onclick = startScanner;
-    
-    // Manual Search Button
-    document.getElementById('btn-manual-search').onclick = () => {
-        const val = document.getElementById('search-input').value.trim();
-        if(val) handleSearchOrScan(val);
-    };
-    
-    // Nav Arrows
-    document.getElementById('prev-bay-btn').onclick = () => changeBay(-1);
-    document.getElementById('next-bay-btn').onclick = () => changeBay(1);
+    // Set background grid size based on PPU (1 inch squares)
+    els.pegboard.style.backgroundSize = `${state.ppu}px ${state.ppu}px`;
+    els.pegboard.style.width = `${state.ppu * CONFIG.boardWidthInches}px`;
+    els.pegboard.style.height = `${state.ppu * CONFIG.boardHeightInches}px`;
 }
 
-// --- SWIPE LOGIC ---
-function setupSwipe() {
-    let touchStartX = 0;
-    let touchEndX = 0;
-    const main = document.getElementById('main-container');
-    
-    main.addEventListener('touchstart', e => touchStartX = e.changedTouches[0].screenX, {passive: true});
-    main.addEventListener('touchend', e => {
-        touchEndX = e.changedTouches[0].screenX;
-        handleGesture();
-    }, {passive: true});
-
-    function handleGesture() {
-        const diff = touchEndX - touchStartX;
-        if (Math.abs(diff) > 50) { 
-            if (diff > 0) changeBay(-1); // Swipe Right -> Prev
-            else changeBay(1); // Swipe Left -> Next
-        }
-    }
-}
-
-// --- DATA LOADING ---
 async function loadCSVData() {
-    const ts = new Date().getTime();
-    const [filesReq, pogReq, mapReq] = await Promise.all([
-        fetch(`githubfiles.csv?t=${ts}`),
-        fetch(`allplanogramdata.csv?t=${ts}`),
-        fetch(`Store_POG_Mapping.csv?t=${ts}`)
-    ]);
+    try {
+        const [mappingRes, dataRes, filesRes] = await Promise.all([
+            fetch('Store_POG_Mapping.csv'),
+            fetch('allplanogramdata.csv'),
+            fetch('githubfiles.csv')
+        ]);
 
-    if (!filesReq.ok || !pogReq.ok || !mapReq.ok) throw new Error("Failed to fetch CSVs");
+        state.storeMapping = parseCSV(await mappingRes.text());
+        state.allData = parseCSV(await dataRes.text());
+        
+        // Normalize github files list for easier search
+        const rawFiles = parseCSV(await filesRes.text());
+        // Assuming githubfiles.csv has a column 'Filename'
+        state.githubFiles = rawFiles.map(row => Object.values(row)[0]); 
 
-    const filesText = await filesReq.text();
-    const pogText = await pogReq.text();
-    const mapText = await mapReq.text();
-
-    fileIndex = filesText.split('\n').map(l => l.trim());
-    storeMap = parseCSV(mapText);
-    
-    // Parse POG Data and Pre-Normalize UPCs
-    const rawPogData = parseCSV(pogText);
-    pogData = rawPogData.map(item => {
-        // Add a 'CleanUPC' property to every item for easy matching later
-        item.CleanUPC = normalizeUPC(item.UPC);
-        return item;
-    });
+    } catch (e) {
+        alert("Error loading data files. Ensure CSVs are in root.");
+        console.error(e);
+    }
 }
 
 function parseCSV(text) {
-    const lines = text.split('\n').filter(l => l.trim().length > 0);
+    const lines = text.trim().split('\n');
     const headers = lines[0].split(',').map(h => h.trim());
-    const result = [];
-    for (let i = 1; i < lines.length; i++) {
-        // Handle simple CSV splitting
-        const row = lines[i].split(',');
-        if (row.length < headers.length) continue;
+    return lines.slice(1).map(line => {
+        const values = line.split(',');
         let obj = {};
-        headers.forEach((h, idx) => {
-            obj[h] = row[idx] ? row[idx].trim() : "";
-        });
-        result.push(obj);
-    }
-    return result;
+        headers.forEach((h, i) => obj[h] = values[i] ? values[i].trim() : '');
+        return obj;
+    });
 }
 
-// --- STORE LOGIC ---
-function loadStoreLogic(storeNum) {
-    const mapping = storeMap.find(s => s.Store === storeNum);
-    if (!mapping) {
-        document.getElementById('error-msg').classList.remove('hidden');
+// 2. STORE LOGIC
+document.getElementById('btn-load-store').addEventListener('click', () => {
+    const storeNum = els.inputStore.value.trim();
+    const mapEntry = state.storeMapping.find(r => r.Store === storeNum);
+    
+    if (mapEntry) {
+        state.currentStore = storeNum;
+        state.currentPOG = mapEntry.POG;
+        loadPOG(state.currentPOG);
+        els.modalStore.classList.remove('active');
+        updateHeader();
+    } else {
+        document.getElementById('login-error').innerText = "Store not found.";
+    }
+});
+
+document.getElementById('btn-switch-store').addEventListener('click', () => {
+    els.modalStore.classList.add('active');
+});
+
+function loadPOG(pogID) {
+    // Filter Master Data
+    state.pogData = state.allData.filter(item => item.POG === pogID);
+    
+    if (state.pogData.length === 0) {
+        alert("No items found for this POG ID.");
         return;
     }
-    currentStore = storeNum;
-    currentPOG = mapping.POG;
-    localStorage.setItem('harpa_store', storeNum);
-    
-    // Determine Available Bays
-    const pogItems = pogData.filter(i => i.POG === currentPOG);
-    // Sort bays numerically
-    allBays = [...new Set(pogItems.map(i => parseInt(i.Bay)))].sort((a,b)=>a-b);
-    
-    if(allBays.length === 0) return alert("No bays found for POG " + currentPOG);
 
-    document.getElementById('store-modal').classList.add('hidden');
-    document.getElementById('store-display').innerText = `Store #${storeNum}`;
-    document.getElementById('pog-display').innerText = `POG: ${currentPOG}`;
-    document.getElementById('error-msg').classList.add('hidden');
-
-    // Load the first available bay
-    loadBay(allBays[0]);
+    // Calculate Bays
+    const bays = [...new Set(state.pogData.map(i => parseInt(i.Bay)))];
+    state.totalBays = Math.max(...bays);
+    state.currentBay = 1;
+    
+    renderBay(state.currentBay);
 }
 
-function resetStore() {
-    localStorage.removeItem('harpa_store');
-    location.reload();
-}
-
-// --- BAY NAVIGATION ---
-function changeBay(dir) {
-    const idx = allBays.indexOf(currentBay);
-    if(idx === -1) return;
+// 3. RENDERING
+function renderBay(bayNum) {
+    els.pegboard.innerHTML = ''; // Clear board
+    const bayItems = state.pogData.filter(i => parseInt(i.Bay) === bayNum);
     
-    let newIdx = idx + dir;
-    if(newIdx < 0) newIdx = 0;
-    if(newIdx >= allBays.length) newIdx = allBays.length - 1;
-    
-    if(allBays[newIdx] !== currentBay) {
-        loadBay(allBays[newIdx]);
-    }
-}
+    // Update UI
+    els.dispBay.innerText = `Bay ${bayNum} of ${state.totalBays}`;
+    updateProgress();
 
-function loadBay(bayNum) {
-    currentBay = bayNum;
-    document.getElementById('bay-indicator').innerText = `Bay ${bayNum} of ${allBays.length}`;
-    
-    document.getElementById('prev-bay-btn').disabled = (bayNum === allBays[0]);
-    document.getElementById('next-bay-btn').disabled = (bayNum === allBays[allBays.length - 1]);
-
-    renderGrid(bayNum);
-}
-
-// --- RENDERER ---
-function renderGrid(bayNum) {
-    const container = document.getElementById('grid-view-container');
-    container.innerHTML = '';
-
-    // 1. Auto-Scale to Screen Width
-    const screenWidth = document.getElementById('main-container').clientWidth;
-    const usableWidth = screenWidth - 10; // Padding
-    
-    // Calculate PPI based on 4ft (48 inches) fitting on screen
-    // Use global variable for use in click handlers if needed
-    let renderPPI = usableWidth / 48; 
-    
-    // Dimensions
-    const boardW = 48 * renderPPI;
-    const boardH = 72 * renderPPI;
-
-    container.style.width = `${boardW}px`;
-    container.style.height = `${boardH}px`;
-    container.style.backgroundSize = `${renderPPI}px ${renderPPI}px`;
-
-    // 2. Get Items
-    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === bayNum);
-    let complete = 0;
-
-    items.forEach(item => {
-        // Parse Coords
-        const { r, c } = getCoords(item.Peg);
-        const h = parseFloat(item.Height.replace(' in','')) || 6;
-        const w = parseFloat(item.Width.replace(' in','')) || 3;
-
-        // Positioning
-        const frogX = (c - 1) * renderPPI;
-        const frogY = (r - 1) * renderPPI;
-
-        // Frog Dot
-        const frog = document.createElement('div');
-        frog.className = 'frog-dot';
-        frog.style.left = `${frogX + (renderPPI/2)}px`;
-        frog.style.top = `${frogY + (renderPPI/2)}px`;
-        container.appendChild(frog);
-
-        // Product Box (Centered between hole C and C+1)
-        const spanCenterX = frogX + renderPPI; // 1 inch to the right
-        const boxLeft = spanCenterX - ((w * renderPPI)/2);
-        const boxTop = frogY + (renderPPI/2);
-
-        const box = document.createElement('div');
-        box.className = 'product-box';
-        box.style.width = `${w * renderPPI}px`;
-        box.style.height = `${h * renderPPI}px`;
-        box.style.left = `${boxLeft}px`;
-        box.style.top = `${boxTop}px`;
-
-        // Use CleanUPC for matching
-        const clean = item.CleanUPC; 
-        box.dataset.upc = clean;
-        box.dataset.desc = item.ProductDescription.toLowerCase();
-
-        if(completedItems.has(clean)) {
-            box.classList.add('completed');
-            complete++;
-        }
-
-        // Image finding (using raw UPC start match to handle filename variance)
-        // But search file index using raw UPC logic
-        const imgName = fileIndex.find(f => f.startsWith(item.UPC));
-        if(imgName) {
-            const img = document.createElement('img');
-            img.src = imgName;
-            box.appendChild(img);
-        } else {
-            box.innerHTML = `<span style="font-size:${renderPPI/2.5}px; text-align:center; padding:1px;">${item.UPC}</span>`;
-        }
-
-        box.onclick = () => toggleComplete(clean, box);
-        container.appendChild(box);
+    bayItems.forEach(item => {
+        createProductElement(item);
     });
-
-    updateProgress(complete, items.length);
 }
 
-function getCoords(pegStr) {
-    if(!pegStr) return {r:1, c:1};
-    const m = pegStr.match(/R(\d+)\s*C(\d+)/);
-    if(m) return { r: parseInt(m[1]), c: parseInt(m[2]) };
-    return { r: 1, c: 1 };
+function createProductElement(item) {
+    // Parse Coordinate "R02 C03"
+    const parts = item.Peg.split(' ');
+    const row = parseInt(parts[0].replace('R', ''));
+    const col = parseInt(parts[1].replace('C', ''));
+
+    // Coordinates
+    const topPx = row * state.ppu;
+    // "Product hangs centered between Col C and C+1". Center of C is col * ppu. Center of gap is (col + 0.5) * ppu
+    const leftPx = (col + 0.5) * state.ppu; 
+
+    // Container
+    const el = document.createElement('div');
+    el.className = 'product-item';
+    el.dataset.upc = item.UPC;
+    
+    // Position
+    el.style.top = `${topPx}px`;
+    el.style.left = `${leftPx}px`;
+    
+    // Logic: If we assume the item hangs DOWN from the peg, no calc needed.
+    // But we need to center the image visually horizontally on the peg hole gap.
+    // We apply a transform to center the element itself.
+    el.style.transform = 'translateX(-50%)';
+
+    // The Red Frog Dot (The actual peg hole is at col integer, but user puts peg in hole C and C+1)
+    // The prompt says: "Red Dot rendered at exact (Row, Col) coordinate"
+    // Since container is centered at (col+0.5), we need to offset the dot to be at (col).
+    const dot = document.createElement('div');
+    dot.className = 'frog-dot';
+    // Dot needs to be at (col * ppu). Container is at (col+0.5 * ppu).
+    // Difference is -0.5 * ppu.
+    dot.style.left = 'calc(50% - ' + (state.ppu * 0.5) + 'px)';
+    dot.style.top = '0px';
+
+    // Image
+    const img = document.createElement('img');
+    img.className = 'product-img';
+    img.style.width = `${(item.Width || 3) * state.ppu}px`; // Default 3 inches if missing
+    img.style.height = `${(item.Height || 4) * state.ppu}px`; // Default 4 inches
+    
+    // Image source resolution
+    const fileName = findImageFile(item.UPC);
+    img.src = fileName ? fileName : `https://via.placeholder.com/50?text=${item.UPC}`;
+    
+    // Click to Toggle Complete
+    el.onclick = () => toggleComplete(item.UPC, el);
+
+    // Check completion state
+    if (state.completedUPCs.includes(item.UPC)) {
+        el.classList.add('completed');
+    }
+
+    el.appendChild(dot);
+    el.appendChild(img);
+    els.pegboard.appendChild(el);
 }
 
-// --- COMPLETION LOGIC ---
-function toggleComplete(cleanUpc, el) {
-    if(completedItems.has(cleanUpc)) {
-        completedItems.delete(cleanUpc);
-        if(el) el.classList.remove('completed');
+function findImageFile(upc) {
+    // Look in githubfiles for exact match or match with leading zero logic
+    // For MVP, assuming filename starts with UPC
+    return state.githubFiles.find(f => f.includes(upc));
+}
+
+function toggleComplete(upc, el) {
+    if (state.completedUPCs.includes(upc)) {
+        state.completedUPCs = state.completedUPCs.filter(u => u !== upc);
+        el.classList.remove('completed');
     } else {
-        completedItems.add(cleanUpc);
-        if(el) el.classList.add('completed');
+        state.completedUPCs.push(upc);
+        el.classList.add('completed');
     }
-    localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
+    localStorage.setItem('harpa_completed_upcs', JSON.stringify(state.completedUPCs));
+    updateProgress();
+}
+
+function updateProgress() {
+    const bayItems = state.pogData.filter(i => parseInt(i.Bay) === state.currentBay);
+    const total = bayItems.length;
+    if(total === 0) return;
     
-    // Recalculate stats
-    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
-    const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
-    updateProgress(done, items.length);
+    const completed = bayItems.filter(i => state.completedUPCs.includes(i.UPC)).length;
+    const pct = (completed / total) * 100;
+    els.progressFill.style.width = `${pct}%`;
 }
 
-function updateProgress(done, total) {
-    const pct = total > 0 ? Math.round((done/total)*100) : 0;
-    document.getElementById('progress-bar').style.width = `${pct}%`;
-    document.getElementById('progress-count').innerText = `${done} / ${total}`;
+function updateHeader() {
+    els.dispStore.innerText = `Store: ${state.currentStore}`;
+    els.dispPog.innerText = `POG: ${state.currentPOG}`;
 }
 
-function loadProgress() {
-    const s = localStorage.getItem('harpa_complete');
-    if(s) completedItems = new Set(JSON.parse(s));
-}
+// 4. SCANNER & SEARCH
+let html5QrcodeScanner = null;
 
-// --- SCANNER & SEARCH ---
+document.getElementById('btn-scan').addEventListener('click', () => {
+    els.modalScanner.classList.add('active');
+    startScanner();
+});
+
 function startScanner() {
-    document.getElementById('scanner-modal').classList.remove('hidden');
-    
-    html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-        { facingMode: "environment" }, 
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-            handleSearchOrScan(decodedText);
-            // We don't close scanner automatically anymore, user must close manually or keep scanning
-        },
-        (errorMessage) => {}
-    ).catch(err => {
-        alert("Camera Error: " + err);
-        stopScanner();
-    });
+    html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader", { fps: 10, qrbox: 250 });
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
 }
 
 function stopScanner() {
-    if(html5QrCode) {
-        html5QrCode.stop().then(() => {
-            html5QrCode.clear();
-            document.getElementById('scanner-modal').classList.add('hidden');
-        }).catch(() => {
-            document.getElementById('scanner-modal').classList.add('hidden');
-        });
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().then(() => {
+            els.modalScanner.classList.remove('active');
+        }).catch(error => console.error(error));
     } else {
-        document.getElementById('scanner-modal').classList.add('hidden');
+        els.modalScanner.classList.remove('active');
     }
 }
 
-function handleSearchOrScan(rawInput) {
-    // 1. Normalize Input
-    const cleanInput = normalizeUPC(rawInput);
+function onScanSuccess(decodedText) {
+    // Strip leading zeros
+    let cleanUPC = decodedText.replace(/^0+/, '');
+    els.scannerDebug.innerText = `Last Scanned: ${cleanUPC}`;
     
-    // 2. Update Debug Display
-    document.getElementById('last-scanned-code').innerHTML = `Raw: ${rawInput} <br> Clean: ${cleanInput}`;
-
-    // 3. Global Search in current POG (All Bays)
-    // We search by CleanUPC
-    const match = pogData.find(i => i.POG === currentPOG && i.CleanUPC === cleanInput);
-
-    if(!match) {
-        // Audio feedback for failure?
-        return; 
-    }
-
-    // 4. Check Bay
-    const matchBay = parseInt(match.Bay);
-    if (matchBay !== currentBay) {
-        // Auto-switch bay
-        loadBay(matchBay);
-        // Delay highlight to allow render
-        setTimeout(() => highlightItem(cleanInput), 500);
-    } else {
-        highlightItem(cleanInput);
-    }
+    stopScanner(); // Close camera on success
+    handleSearch(cleanUPC);
 }
 
-function highlightItem(cleanUpc) {
-    // Find box by dataset attribute
-    const box = document.querySelector(`.product-box[data-upc="${cleanUpc}"]`);
+function onScanFailure(error) {
+    // console.warn(`Code scan error = ${error}`);
+}
+
+// Manual Search
+document.getElementById('btn-manual-go').addEventListener('click', () => {
+    const input = document.getElementById('input-manual').value.trim();
+    const cleanUPC = input.replace(/^0+/, '');
+    handleSearch(cleanUPC);
+});
+
+function handleSearch(upc) {
+    const item = state.pogData.find(i => i.UPC === upc);
     
-    if(box) {
-        box.scrollIntoView({behavior: "smooth", block: "center"});
-        box.classList.add('highlight');
+    if (!item) {
+        alert(`UPC ${upc} not found in this Planogram.`);
+        return;
+    }
+
+    // If in different bay, switch
+    if (parseInt(item.Bay) !== state.currentBay) {
+        state.currentBay = parseInt(item.Bay);
+        renderBay(state.currentBay);
+    }
+
+    // Highlight logic
+    const targetEl = document.querySelector(`.product-item[data-upc="${upc}"]`);
+    if (targetEl) {
+        targetEl.scrollIntoView({behavior: "smooth", block: "center"});
+        targetEl.classList.add('highlight');
+        setTimeout(() => targetEl.classList.remove('highlight'), 3000);
         
-        // Auto-Complete on Scan
-        if(!box.classList.contains('completed')) {
-            toggleComplete(cleanUpc, box);
+        // Auto-mark complete on scan? (Optional, usually desired)
+        if (!state.completedUPCs.includes(upc)) {
+            toggleComplete(upc, targetEl);
         }
-
-        // Remove highlight after 2 seconds
-        setTimeout(() => box.classList.remove('highlight'), 2000);
     }
 }
 
-// --- PDF ---
-function openPDF() {
-    if(!currentPOG) return alert("Select store first.");
-    const pdf = fileIndex.find(f => f.includes(currentPOG) && f.endsWith('.pdf'));
-    if(pdf) {
-        document.getElementById('pdf-frame').src = pdf;
-        document.getElementById('pdf-modal').classList.remove('hidden');
+// 5. NAVIGATION & PDF
+document.getElementById('nav-prev').addEventListener('click', () => changeBay(-1));
+document.getElementById('nav-next').addEventListener('click', () => changeBay(1));
+
+function changeBay(dir) {
+    const newBay = state.currentBay + dir;
+    if (newBay > 0 && newBay <= state.totalBays) {
+        state.currentBay = newBay;
+        showSwipeOverlay(newBay);
+        renderBay(state.currentBay);
+    }
+}
+
+function showSwipeOverlay(num) {
+    els.swipeOverlay.innerText = num;
+    els.swipeOverlay.classList.remove('hidden');
+    setTimeout(() => els.swipeOverlay.classList.add('hidden'), 500);
+}
+
+// PDF
+document.getElementById('btn-pdf').addEventListener('click', () => {
+    const pdfFile = state.githubFiles.find(f => f.includes(state.currentPOG) && f.endsWith('.pdf'));
+    if (pdfFile) {
+        els.pdfFrame.src = pdfFile;
+        els.modalPdf.classList.add('active');
     } else {
-        alert("PDF not found for POG " + currentPOG);
+        alert("PDF Hard Copy not found for this POG.");
     }
-}
+});
 
-function closePDF() {
-    document.getElementById('pdf-modal').classList.add('hidden');
-    document.getElementById('pdf-frame').src = "";
+window.closeModal = (id) => {
+    document.getElementById(id).classList.remove('active');
+};
+
+// 6. GESTURES (SWIPE)
+function setupEventListeners() {
+    let touchstartX = 0;
+    let touchendX = 0;
+    
+    els.workspace.addEventListener('touchstart', e => {
+        touchstartX = e.changedTouches[0].screenX;
+    });
+
+    els.workspace.addEventListener('touchend', e => {
+        touchendX = e.changedTouches[0].screenX;
+        handleGesture();
+    });
+
+    function handleGesture() {
+        if (touchendX < touchstartX - 50) changeBay(1); // Swipe Left -> Next Bay
+        if (touchendX > touchstartX + 50) changeBay(-1); // Swipe Right -> Prev Bay
+    }
 }
