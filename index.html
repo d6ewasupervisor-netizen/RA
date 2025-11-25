@@ -2,98 +2,81 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Prevent auto-zoom on input focus, allow user zoom -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HARPA Reset Tool</title>
+    <title>HARPA Field Tool</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+    <!-- QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
 
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="modal-overlay">
-        <div class="modal-card">
-            <div class="spinner"></div>
-            <h3>Loading Data...</h3>
-            <p>Fetching Planograms</p>
-        </div>
-    </div>
-
-    <!-- Store Modal -->
-    <div id="store-modal" class="modal-overlay hidden">
-        <div class="modal-card">
-            <h2>Select Store</h2>
-            <input type="number" id="store-input" class="input-box" placeholder="Store #">
-            <button id="btn-load-store" class="btn-primary">Load Planogram</button>
-            <p id="error-msg" class="error hidden">Store not found.</p>
-        </div>
-    </div>
-
-    <!-- Scanner Overlay -->
-    <div id="scanner-modal" class="modal-overlay hidden" style="flex-direction: column; justify-content: flex-start; padding-top: 20px;">
-        <button onclick="stopScanner()" class="btn-secondary" style="margin-bottom:10px; background:white;">CLOSE CAMERA ✕</button>
-        <div id="reader" style="width:100%; max-width:500px; background:black;"></div>
-        <div style="color:white; margin-top:10px; text-align:center;">Point at barcode</div>
-    </div>
-
-    <!-- PDF Modal -->
-    <div id="pdf-modal" class="modal-overlay hidden">
-        <div class="modal-card pdf-card">
-            <div class="modal-header">
-                <h3>Planogram PDF</h3>
-                <button onclick="closePDF()" class="btn-secondary">Close</button>
-            </div>
-            <iframe id="pdf-frame"></iframe>
-        </div>
-    </div>
-
-    <!-- MAIN HEADER -->
-    <header>
+    <!-- HEADER -->
+    <header id="app-header">
         <div class="top-row">
-            <div class="store-label">
-                <span id="store-display">Store: --</span>
-                <span id="pog-display" style="font-size:0.8rem; color:#666; margin-left:5px;"></span>
+            <div class="store-info">
+                <span id="disp-store">Store: --</span>
+                <span id="disp-pog">POG: --</span>
             </div>
             <div class="top-actions">
-                <button onclick="openPDF()" class="btn-mini">PDF</button>
-                <button onclick="resetStore()" class="btn-mini">Switch</button>
+                <button id="btn-pdf" class="secondary-btn">📄 PDF</button>
+                <button id="btn-switch-store" class="secondary-btn">🔄 Switch</button>
             </div>
         </div>
-
-        <!-- Scanner & Search Area -->
-        <div class="tool-row">
-            <button id="btn-scan-toggle" class="btn-scan-big">📷 SCAN BARCODE</button>
+        
+        <button id="btn-scan" class="primary-btn">📷 SCAN BARCODE</button>
+        
+        <div class="manual-entry">
+            <input type="number" id="input-manual" placeholder="Enter UPC manually...">
+            <button id="btn-manual-go">GO</button>
         </div>
-        <div class="search-row">
-            <input type="text" id="search-input" placeholder="Enter UPC manually...">
-            <button id="btn-manual-search" class="btn-search">GO</button>
-        </div>
-        <!-- Debug Barcode Display -->
-        <div id="scan-debug" class="debug-text">Last Scanned: <span id="last-scanned-code">Waiting...</span></div>
+        <div id="scanner-debug">Last Scanned: None</div>
 
-        <!-- Navigation -->
         <div class="nav-row">
-            <button id="prev-bay-btn" class="nav-arrow">‹</button>
-            <div id="bay-indicator">Bay 1</div>
-            <button id="next-bay-btn" class="nav-arrow">›</button>
-        </div>
-
-        <!-- Progress -->
-        <div class="progress-container">
-            <div id="progress-bar" class="progress-fill"></div>
-        </div>
-        <div class="progress-label">
-            <span id="progress-count">0/0 Complete</span>
+            <button id="nav-prev" class="nav-arrow">&lt;</button>
+            <div class="bay-indicator">
+                <span id="disp-bay">Bay 1 of 3</span>
+                <div class="progress-track">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+            </div>
+            <button id="nav-next" class="nav-arrow">&gt;</button>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main id="main-container">
-        <div id="grid-view-container">
-            <!-- Grid will be drawn here -->
+    <!-- MAIN WORKSPACE -->
+    <main id="workspace">
+        <div id="pegboard" class="pegboard">
+            <!-- Grid and Products rendered via JS -->
         </div>
+        <div id="swipe-overlay" class="hidden">1</div>
     </main>
+
+    <!-- MODAL: STORE SELECT -->
+    <div id="modal-store" class="modal active">
+        <div class="modal-content">
+            <h2>Select Store</h2>
+            <p>Enter Store Number to Load POG</p>
+            <input type="number" id="input-store-login" placeholder="Store # (e.g., 5)">
+            <button id="btn-load-store">Load Planogram</button>
+            <p id="login-error" class="error-msg"></p>
+        </div>
+    </div>
+
+    <!-- MODAL: PDF VIEW -->
+    <div id="modal-pdf" class="modal">
+        <div class="modal-content full-screen">
+            <button class="close-modal" onclick="closeModal('modal-pdf')">Close PDF</button>
+            <iframe id="pdf-frame" src=""></iframe>
+        </div>
+    </div>
+
+    <!-- MODAL: SCANNER -->
+    <div id="modal-scanner" class="modal">
+        <div class="modal-content full-screen scanner-wrapper">
+            <div id="reader"></div>
+            <button class="close-modal" onclick="stopScanner()">Close Camera</button>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>
