@@ -1,111 +1,142 @@
 :root {
-    --primary: #005EB8;
-    --success: #43A047;
-    --bg: #f4f4f9;
-    --header-bg: #ffffff;
-    --border: #ccc;
+    --primary: #0056b3;
+    --accent: #28a745;
+    --bg: #f4f4f4;
+    --grid-line: #ddd;
+    --peg-hole: #333;
+    --header-height: 180px;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+* { box-sizing: border-box; touch-action: manipulation; }
 
-body { height: 100vh; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
-
-/* --- HEADER LAYOUT --- */
-header {
-    background: var(--header-bg);
-    padding: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    z-index: 100;
-    flex-shrink: 0;
+body, html {
+    margin: 0; padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden; /* Prevent body scroll, handle inside components */
+    background-color: var(--bg);
 }
 
-.top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.store-label { font-weight: 800; font-size: 1rem; color: var(--primary); }
-.btn-mini { padding: 4px 8px; border: 1px solid #999; background: #fff; border-radius: 4px; font-size: 0.75rem; }
-
-.tool-row { margin-bottom: 6px; }
-.btn-scan-big { 
-    width: 100%; padding: 10px; 
-    background: var(--primary); color: white; 
-    border: none; border-radius: 4px; 
-    font-weight: bold; font-size: 1rem;
-    display: flex; justify-content: center; align-items: center; gap: 8px;
-}
-
-.search-row { display: flex; gap: 5px; margin-bottom: 5px; }
-#search-input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
-.btn-search { padding: 0 15px; background: #333; color: white; border: none; border-radius: 4px; font-weight: bold; }
-
-.debug-text { font-size: 0.7rem; color: #d32f2f; text-align: center; margin-bottom: 5px; font-family: monospace; }
-
-.nav-row { display: flex; justify-content: space-between; align-items: center; background: #eee; border-radius: 4px; padding: 4px; margin-bottom: 5px; }
-.nav-arrow { width: 40px; height: 30px; background: white; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; font-size: 1.2rem; line-height: 1; }
-#bay-indicator { font-weight: bold; color: #333; }
-
-.progress-container { height: 4px; background: #ddd; width: 100%; }
-.progress-fill { height: 100%; background: var(--success); width: 0%; transition: 0.3s; }
-.progress-label { text-align: right; font-size: 0.7rem; color: #666; }
-
-/* --- MAIN CANVAS --- */
-main { 
-    flex: 1; 
-    overflow-y: auto; /* Vertical Scroll only */
-    overflow-x: hidden; /* Prevent horizontal scroll, we scale to fit */
-    position: relative; 
-    background: #444; /* Dark background behind board */
-    display: flex;
-    justify-content: center;
-}
-
-#grid-view-container {
-    position: relative;
-    background-color: #e0e0e0;
-    /* 1-inch grid lines */
-    background-image: 
-        linear-gradient(#ccc 1px, transparent 1px),
-        linear-gradient(90deg, #ccc 1px, transparent 1px);
-    /* Size set dynamically via JS */
-    box-shadow: 0 0 20px black;
-    margin-top: 10px;
-    transform-origin: top center;
-}
-
-/* Product Box */
-.product-box {
-    position: absolute;
+/* HEADER */
+#app-header {
+    position: fixed; top: 0; left: 0; width: 100%;
+    height: var(--header-height);
     background: white;
-    border: 1px solid #999;
-    display: flex; justify-content: center; align-items: flex-start;
-    overflow: hidden; cursor: pointer; z-index: 10;
-    border-radius: 2px;
-    box-sizing: border-box;
+    z-index: 100;
+    padding: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: flex; flex-direction: column; justify-content: space-between;
 }
-.product-box img { width: 100%; height: 100%; object-fit: contain; }
-.product-box.completed { opacity: 0.3; filter: grayscale(100%); border: 1px solid var(--success); background: #e8f5e9; }
-.product-box.highlight { border: 3px solid #ff00ea; z-index: 20; box-shadow: 0 0 15px #ff00ea; transform: scale(1.1); opacity: 1 !important;}
 
-/* The Frog Dot */
-.frog-dot {
+.top-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: bold; }
+.top-actions button { padding: 5px 10px; font-size: 12px; }
+
+.primary-btn {
+    background: var(--primary); color: white; border: none;
+    padding: 12px; font-size: 18px; font-weight: bold; border-radius: 5px;
+    width: 100%; cursor: pointer;
+}
+
+.manual-entry { display: flex; gap: 5px; }
+.manual-entry input { flex: 1; padding: 8px; border: 1px solid #ccc; }
+.manual-entry button { padding: 8px 15px; background: #444; color: white; border: none; }
+
+#scanner-debug { font-size: 10px; color: #666; text-align: center; height: 12px; }
+
+.nav-row { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; }
+.nav-arrow { padding: 10px 20px; background: #eee; border: none; font-size: 18px; font-weight: bold; }
+.bay-indicator { flex: 1; text-align: center; padding: 0 10px; }
+.progress-track { height: 6px; background: #ddd; border-radius: 3px; margin-top: 4px; width: 100%; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+
+/* MAIN WORKSPACE */
+#workspace {
+    margin-top: var(--header-height);
+    height: calc(100vh - var(--header-height));
+    width: 100vw;
+    overflow-y: auto; /* Vertical scroll allowed inside bay if needed, but we aim for fit */
+    overflow-x: hidden;
+    position: relative;
+    background-color: white;
+}
+
+.pegboard {
+    position: relative;
+    margin: 0 auto;
+    /* Background Grid Pattern (1 inch squares approx) */
+    background-image: 
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 20px 20px; /* Will be overridden by JS PPU */
+    border: 2px solid #333;
+}
+
+/* PRODUCT & FROG */
+.product-item {
     position: absolute;
-    width: 6px; height: 6px;
-    background: red;
-    border-radius: 50%;
-    z-index: 5;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
 }
 
-/* Modals */
-.modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.9); z-index: 2000; display: flex; justify-content: center; align-items: center; }
-.hidden { display: none !important; }
-.modal-card { background: white; padding: 20px; width: 90%; max-width: 350px; border-radius: 8px; text-align: center; }
-.input-box { width: 100%; padding: 12px; font-size: 1.2rem; text-align: center; margin: 15px 0; border: 2px solid #ccc; }
-.btn-primary { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; font-size: 1rem; font-weight: bold; }
-.error { color: red; margin-top: 10px; }
-.spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 15px auto; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.frog-dot {
+    width: 8px; height: 8px;
+    background-color: red;
+    border-radius: 50%;
+    position: absolute;
+    top: 0; left: 0; /* Relative to container, adjusted by JS */
+    z-index: 5;
+    box-shadow: 0 0 2px white;
+}
 
-/* PDF */
-.pdf-card { width: 98%; height: 95%; padding: 0; display: flex; flex-direction: column; }
-.modal-header { padding: 10px; background: #eee; display: flex; justify-content: space-between; align-items: center; }
+.product-img {
+    position: absolute;
+    top: 5px; /* Hangs slightly below peg */
+    object-fit: contain;
+    z-index: 6;
+    border: 1px solid #ccc;
+    background: white;
+}
+
+/* States */
+.product-item.completed .product-img {
+    opacity: 0.4;
+    filter: grayscale(100%);
+}
+.product-item.completed::after {
+    content: '✔';
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 24px; color: green; font-weight: bold; z-index: 10;
+}
+
+.product-item.highlight {
+    animation: flash 1s infinite;
+    z-index: 20;
+}
+
+@keyframes flash {
+    0% { box-shadow: 0 0 0 0 rgba(0, 86, 179, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(0, 86, 179, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 86, 179, 0); }
+}
+
+/* MODALS */
+.modal {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); z-index: 2000;
+    justify-content: center; align-items: center;
+}
+.modal.active { display: flex; }
+.modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; text-align: center; }
+.modal-content.full-screen { width: 100%; height: 100%; max-width: none; border-radius: 0; padding: 0; display: flex; flex-direction: column; }
+.error-msg { color: red; margin-top: 10px; }
+
+#swipe-overlay {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 100px; color: rgba(0,0,0,0.3); pointer-events: none; z-index: 50;
+}
+.hidden { opacity: 0; transition: opacity 0.5s; }
+
+/* PDF Frame */
 #pdf-frame { flex: 1; width: 100%; border: none; }
+.close-modal { padding: 15px; background: #333; color: white; border: none; font-weight: bold; width: 100%; }
