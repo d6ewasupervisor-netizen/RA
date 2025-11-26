@@ -430,40 +430,64 @@ function handleSearchOrScan(input, fromScanner = false) {
     console.log(`=== SEARCH DEBUG ===`);
     console.log(`Raw input: "${input}"`);
     console.log(`Cleaned UPC: "${clean}"`);
-    console.log(`Current POG: "${currentPOG}" (type: ${typeof currentPOG})`);
+    console.log(`Current POG: "${currentPOG}"`);
 
     // First check if we have items for this POG
     const itemsInPOG = pogData.filter(i => i.POG === currentPOG);
     console.log(`Items in POG "${currentPOG}": ${itemsInPOG.length}`);
     
     if (itemsInPOG.length === 0) {
-        // POG comparison might be failing - check what POGs exist
         const allPOGs = [...new Set(pogData.map(i => i.POG))];
-        console.log(`POG not found! Available POGs in data:`, allPOGs.slice(0, 10));
+        console.log(`POG not found! Available POGs:`, allPOGs.slice(0, 10));
         document.getElementById('scan-result').innerText = `POG "${currentPOG}" has no items`;
         return false;
     }
 
-    // Search for matching UPC
-    const match = itemsInPOG.find(i => i.CleanUPC === clean);
+    // Try multiple matching strategies:
+    // 1. Exact match
+    // 2. Without trailing check digit (scanner adds it, data doesn't have it)
+    // 3. With check digit stripped from data (data has it, scanner doesn't)
+    
+    const cleanNoCheckDigit = clean.length > 1 ? clean.slice(0, -1) : clean;
+    
+    let match = itemsInPOG.find(i => i.CleanUPC === clean);
+    
+    if (!match) {
+        // Try without the check digit (most common case)
+        match = itemsInPOG.find(i => i.CleanUPC === cleanNoCheckDigit);
+        if (match) {
+            console.log(`Matched by removing check digit: "${clean}" → "${cleanNoCheckDigit}"`);
+        }
+    }
+    
+    if (!match) {
+        // Try matching where data has check digit but scan doesn't
+        match = itemsInPOG.find(i => i.CleanUPC.slice(0, -1) === clean);
+        if (match) {
+            console.log(`Matched by ignoring data's check digit`);
+        }
+    }
     
     if (!match) {
         document.getElementById('scan-result').innerText = `"${clean}" not found`;
-        console.log(`UPC "${clean}" not found in POG.`);
-        console.log(`Sample CleanUPCs in this POG:`, itemsInPOG.slice(0, 10).map(i => i.CleanUPC));
+        console.log(`UPC "${clean}" not found (also tried "${cleanNoCheckDigit}")`);
+        console.log(`Sample CleanUPCs:`, itemsInPOG.slice(0, 10).map(i => i.CleanUPC));
         return false;
     }
 
     console.log(`✓ Found match:`, match);
     document.getElementById('scan-result').innerText = `✓ Bay ${match.Bay}, ${match.Peg}`;
 
+    // Use the matched item's CleanUPC for highlighting
+    const matchedUPC = match.CleanUPC;
+
     // Check if we need to change bays
     const itemBay = parseInt(match.Bay);
     if (itemBay !== currentBay) {
         loadBay(itemBay);
-        setTimeout(() => highlightItem(clean), 400);
+        setTimeout(() => highlightItem(matchedUPC), 400);
     } else {
-        highlightItem(clean);
+        highlightItem(matchedUPC);
     }
     
     return true; // Found
