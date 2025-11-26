@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HARPA Reset Tool</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -45,8 +45,13 @@
         </div>
     </div>
 
-    <!-- MAIN HEADER -->
-    <header>
+    <!-- EXPAND BUTTON (shown when header collapsed) -->
+    <button id="btn-expand" class="expand-btn hidden" onclick="toggleHeader()">
+        <span class="expand-arrow">▼</span>
+    </button>
+
+    <!-- MAIN HEADER (collapsible) -->
+    <header id="main-header">
         <div class="header-top">
             <div class="store-info">
                 <h1 id="store-display">Store: --</h1>
@@ -55,6 +60,7 @@
             <div class="header-btns">
                 <button onclick="openPDF()" class="btn-mini">PDF</button>
                 <button onclick="resetStore()" class="btn-mini">Switch</button>
+                <button onclick="toggleHeader()" class="btn-mini btn-collapse">▲</button>
             </div>
         </div>
 
