@@ -60,10 +60,10 @@ async function init() {
     document.getElementById('btn-scan-toggle').onclick = startScanner;
     
     document.getElementById('btn-manual-search').onclick = () => 
-        handleSearchOrScan(document.getElementById('search-input').value.trim());
+        handleSearchOrScan(document.getElementById('search-input').value.trim(), false);
     
     document.getElementById('search-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearchOrScan(document.getElementById('search-input').value.trim());
+        if (e.key === 'Enter') handleSearchOrScan(document.getElementById('search-input').value.trim(), false);
     });
 }
 
@@ -326,8 +326,20 @@ function getCoords(pegStr) {
 // --- UPC LOGIC ---
 function normalizeUPC(upc) {
     if (!upc) return "";
-    // Remove leading zeros for matching
-    return upc.toString().trim().replace(/^0+/, '');
+    
+    // Convert to string, trim whitespace
+    let cleaned = upc.toString().trim();
+    
+    // Remove any non-numeric characters (some scanners add extra chars)
+    cleaned = cleaned.replace(/[^0-9]/g, '');
+    
+    // Strip ALL leading zeros
+    cleaned = cleaned.replace(/^0+/, '');
+    
+    // If the entire UPC was zeros, keep at least one digit
+    if (cleaned === '') cleaned = '0';
+    
+    return cleaned;
 }
 
 function toggleComplete(upc, el) {
@@ -347,16 +359,32 @@ function toggleComplete(upc, el) {
 }
 
 // --- SCANNER & SEARCH ---
+let isProcessingScan = false; // Prevent multiple rapid scans
+
 function startScanner() {
     const modal = document.getElementById('scanner-modal');
     modal.classList.remove('hidden');
+    isProcessingScan = false;
     
     html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
         { facingMode: "environment" }, 
         { fps: 10, qrbox: 250 },
         (decodedText) => {
-            handleSearchOrScan(decodedText);
+            // Prevent multiple scans while processing
+            if (isProcessingScan) return;
+            isProcessingScan = true;
+            
+            // Process the scan and close scanner
+            const found = handleSearchOrScan(decodedText, true);
+            
+            if (found) {
+                // Close scanner after successful scan
+                stopScanner();
+            } else {
+                // Allow retry if not found
+                setTimeout(() => { isProcessingScan = false; }, 1000);
+            }
         },
         (err) => { /* Ignore scan errors */ }
     ).catch(e => {
@@ -371,29 +399,37 @@ function stopScanner() {
             document.getElementById('scanner-modal').classList.add('hidden');
             html5QrCode.clear();
             html5QrCode = null;
+            isProcessingScan = false;
         }).catch(() => {
             document.getElementById('scanner-modal').classList.add('hidden');
+            isProcessingScan = false;
         });
     } else {
         document.getElementById('scanner-modal').classList.add('hidden');
+        isProcessingScan = false;
     }
 }
 
-function handleSearchOrScan(input) {
-    if (!input) return;
+function handleSearchOrScan(input, fromScanner = false) {
+    if (!input) return false;
     
     const clean = normalizeUPC(input);
     
-    // Display for debugging
-    document.getElementById('scan-result').innerText = `${input} → ${clean}`;
+    // Display for debugging - show raw input and cleaned version
+    document.getElementById('scan-result').innerText = `Raw: "${input}" → Clean: "${clean}"`;
+    console.log(`Search: Raw="${input}", Clean="${clean}"`);
 
     // Search GLOBALLY (All Bays in current POG)
     const match = pogData.find(i => i.POG === currentPOG && i.CleanUPC === clean);
     
     if (!match) {
-        document.getElementById('scan-result').innerText = `${input} → NOT FOUND`;
-        return;
+        document.getElementById('scan-result').innerText = `"${clean}" → NOT FOUND`;
+        console.log(`No match found. Available CleanUPCs in POG:`, 
+            pogData.filter(i => i.POG === currentPOG).map(i => i.CleanUPC).slice(0, 10));
+        return false;
     }
+
+    console.log(`Found match:`, match);
 
     // Check if we need to change bays
     const itemBay = parseInt(match.Bay);
@@ -403,6 +439,8 @@ function handleSearchOrScan(input) {
     } else {
         highlightItem(clean);
     }
+    
+    return true; // Found
 }
 
 function highlightItem(upc) {
