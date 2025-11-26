@@ -113,9 +113,19 @@ async function loadCSVData() {
     storeMap = parseCSV(maps);
     
     console.log(`Loaded: ${fileIndex.length} files, ${pogData.length} products, ${storeMap.length} store mappings`);
+    
+    // Debug: Show first few records and their structure
+    if (pogData.length > 0) {
+        console.log("CSV Columns found:", Object.keys(pogData[0]));
+        console.log("Sample record:", pogData[0]);
+        console.log("Sample UPC:", pogData[0].UPC, "-> CleanUPC:", pogData[0].CleanUPC);
+    }
 }
 
 function parseCSV(text) {
+    // Normalize line endings (handle Windows \r\n)
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length === 0) return [];
     
@@ -133,7 +143,7 @@ function parseCSV(text) {
     return res;
 }
 
-// Handle quoted CSV fields properly
+// Handle quoted CSV fields properly and strip any remaining \r
 function parseCSVLine(line) {
     const result = [];
     let current = '';
@@ -145,13 +155,13 @@ function parseCSVLine(line) {
         if (char === '"') {
             inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
+            result.push(current.trim().replace(/\r/g, ''));
             current = '';
         } else {
             current += char;
         }
     }
-    result.push(current.trim());
+    result.push(current.trim().replace(/\r/g, ''));
     return result;
 }
 
@@ -327,8 +337,8 @@ function getCoords(pegStr) {
 function normalizeUPC(upc) {
     if (!upc) return "";
     
-    // Convert to string, trim whitespace
-    let cleaned = upc.toString().trim();
+    // Convert to string, trim whitespace, remove any \r characters
+    let cleaned = upc.toString().trim().replace(/\r/g, '');
     
     // Remove any non-numeric characters (some scanners add extra chars)
     cleaned = cleaned.replace(/[^0-9]/g, '');
@@ -415,21 +425,37 @@ function handleSearchOrScan(input, fromScanner = false) {
     
     const clean = normalizeUPC(input);
     
-    // Display for debugging - show raw input and cleaned version
-    document.getElementById('scan-result').innerText = `Raw: "${input}" → Clean: "${clean}"`;
-    console.log(`Search: Raw="${input}", Clean="${clean}"`);
+    // Display for debugging
+    document.getElementById('scan-result').innerText = `Searching: "${clean}"`;
+    console.log(`=== SEARCH DEBUG ===`);
+    console.log(`Raw input: "${input}"`);
+    console.log(`Cleaned UPC: "${clean}"`);
+    console.log(`Current POG: "${currentPOG}" (type: ${typeof currentPOG})`);
 
-    // Search GLOBALLY (All Bays in current POG)
-    const match = pogData.find(i => i.POG === currentPOG && i.CleanUPC === clean);
+    // First check if we have items for this POG
+    const itemsInPOG = pogData.filter(i => i.POG === currentPOG);
+    console.log(`Items in POG "${currentPOG}": ${itemsInPOG.length}`);
     
-    if (!match) {
-        document.getElementById('scan-result').innerText = `"${clean}" → NOT FOUND`;
-        console.log(`No match found. Available CleanUPCs in POG:`, 
-            pogData.filter(i => i.POG === currentPOG).map(i => i.CleanUPC).slice(0, 10));
+    if (itemsInPOG.length === 0) {
+        // POG comparison might be failing - check what POGs exist
+        const allPOGs = [...new Set(pogData.map(i => i.POG))];
+        console.log(`POG not found! Available POGs in data:`, allPOGs.slice(0, 10));
+        document.getElementById('scan-result').innerText = `POG "${currentPOG}" has no items`;
         return false;
     }
 
-    console.log(`Found match:`, match);
+    // Search for matching UPC
+    const match = itemsInPOG.find(i => i.CleanUPC === clean);
+    
+    if (!match) {
+        document.getElementById('scan-result').innerText = `"${clean}" not found`;
+        console.log(`UPC "${clean}" not found in POG.`);
+        console.log(`Sample CleanUPCs in this POG:`, itemsInPOG.slice(0, 10).map(i => i.CleanUPC));
+        return false;
+    }
+
+    console.log(`✓ Found match:`, match);
+    document.getElementById('scan-result').innerText = `✓ Bay ${match.Bay}, ${match.Peg}`;
 
     // Check if we need to change bays
     const itemBay = parseInt(match.Bay);
