@@ -401,16 +401,13 @@ function startScanner() {
             if (isProcessingScan) return;
             isProcessingScan = true;
             
-            // Process the scan and close scanner
-            const found = handleSearchOrScan(decodedText, true);
+            // IMMEDIATELY close the scanner first
+            stopScanner();
             
-            if (found) {
-                // Close scanner after successful scan
-                stopScanner();
-            } else {
-                // Allow retry if not found
-                setTimeout(() => { isProcessingScan = false; }, 1000);
-            }
+            // Then process the scan after a brief delay to let camera close
+            setTimeout(() => {
+                handleSearchOrScan(decodedText, true);
+            }, 100);
         },
         (err) => { /* Ignore scan errors */ }
     ).catch(e => {
@@ -420,18 +417,19 @@ function startScanner() {
 }
 
 function stopScanner() {
+    const modal = document.getElementById('scanner-modal');
+    modal.classList.add('hidden'); // Hide immediately
+    
     if (html5QrCode) {
         html5QrCode.stop().then(() => {
-            document.getElementById('scanner-modal').classList.add('hidden');
             html5QrCode.clear();
             html5QrCode = null;
             isProcessingScan = false;
         }).catch(() => {
-            document.getElementById('scanner-modal').classList.add('hidden');
+            html5QrCode = null;
             isProcessingScan = false;
         });
     } else {
-        document.getElementById('scanner-modal').classList.add('hidden');
         isProcessingScan = false;
     }
 }
@@ -440,12 +438,15 @@ function handleSearchOrScan(input, fromScanner = false) {
     if (!input) return false;
     
     const clean = normalizeUPC(input);
+    // Also prepare version without check digit (last digit of UPC-A is check digit)
+    const cleanNoCheckDigit = clean.length > 1 ? clean.slice(0, -1) : clean;
     
-    // Display for debugging
-    document.getElementById('scan-result').innerText = `Searching: "${clean}"`;
+    // Display for debugging - show the version without check digit since that's what we're matching
+    document.getElementById('scan-result').innerText = `Searching: ${cleanNoCheckDigit}`;
     console.log(`=== SEARCH DEBUG ===`);
     console.log(`Raw input: "${input}"`);
-    console.log(`Cleaned UPC: "${clean}"`);
+    console.log(`Cleaned (no leading zeros): "${clean}"`);
+    console.log(`Without check digit: "${cleanNoCheckDigit}"`);
     console.log(`Current POG: "${currentPOG}"`);
 
     // First check if we have items for this POG
@@ -460,11 +461,9 @@ function handleSearchOrScan(input, fromScanner = false) {
     }
 
     // Try multiple matching strategies:
-    // 1. Exact match
-    // 2. Without trailing check digit (scanner adds it, data doesn't have it)
-    // 3. With check digit stripped from data (data has it, scanner doesn't)
-    
-    const cleanNoCheckDigit = clean.length > 1 ? clean.slice(0, -1) : clean;
+    // 1. Exact match (rare - data usually doesn't have check digit)
+    // 2. Without trailing check digit (most common - scanner adds check digit, data doesn't have it)
+    // 3. Data has check digit but scan doesn't
     
     let match = itemsInPOG.find(i => i.CleanUPC === clean);
     
@@ -485,7 +484,7 @@ function handleSearchOrScan(input, fromScanner = false) {
     }
     
     if (!match) {
-        document.getElementById('scan-result').innerText = `"${clean}" not found`;
+        document.getElementById('scan-result').innerText = `"${cleanNoCheckDigit}" not found`;
         console.log(`UPC "${clean}" not found (also tried "${cleanNoCheckDigit}")`);
         console.log(`Sample CleanUPCs:`, itemsInPOG.slice(0, 10).map(i => i.CleanUPC));
         return false;
