@@ -319,11 +319,16 @@ function renderGrid(bayNum) {
             img.alt = item.UPC;
             img.onerror = () => {
                 box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
+                // Re-add position label after innerHTML replacement
+                addPositionLabel(box, item.Position);
             };
             box.appendChild(img);
         } else {
             box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
         }
+
+        // Add Position Number Label
+        addPositionLabel(box, item.Position);
 
         // Open detail modal on click
         box.onclick = () => openProductModal(box);
@@ -332,6 +337,15 @@ function renderGrid(bayNum) {
 
     // Update Progress
     updateProgress(items, doneCount);
+}
+
+// Helper function to add position label
+function addPositionLabel(box, position) {
+    if (!position) return;
+    const posLabel = document.createElement('div');
+    posLabel.className = 'position-label';
+    posLabel.innerText = position;
+    box.appendChild(posLabel);
 }
 
 function updateProgress(items, doneCount) {
@@ -529,6 +543,7 @@ function openProductModal(box) {
     const imgSrc = box.dataset.imgSrc;
     
     // Populate modal
+    document.getElementById('detail-position').innerText = item.Position || '--';
     document.getElementById('detail-upc').innerText = item.UPC || '--';
     document.getElementById('detail-desc').innerText = item.ProductDescription || item.Description || '--';
     document.getElementById('detail-location').innerText = `Bay ${item.Bay}, ${item.Peg}`;
