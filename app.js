@@ -16,11 +16,15 @@ let currentBay = 1;
 let allBays = [];
 let html5QrCode = null;
 let completedItems = new Set(JSON.parse(localStorage.getItem('harpa_complete') || "[]"));
+let headerCollapsed = false;
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
     init();
     setupSwipe();
+    window.addEventListener('resize', () => {
+        if (currentPOG && currentBay) renderGrid(currentBay);
+    });
 });
 
 async function init() {
@@ -61,6 +65,27 @@ async function init() {
     document.getElementById('search-input').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearchOrScan(document.getElementById('search-input').value.trim());
     });
+}
+
+// --- HEADER COLLAPSE/EXPAND ---
+function toggleHeader() {
+    const header = document.getElementById('main-header');
+    const expandBtn = document.getElementById('btn-expand');
+    
+    headerCollapsed = !headerCollapsed;
+    
+    if (headerCollapsed) {
+        header.classList.add('collapsed');
+        expandBtn.classList.remove('hidden');
+    } else {
+        header.classList.remove('collapsed');
+        expandBtn.classList.add('hidden');
+    }
+    
+    // Re-render grid after transition to use new available space
+    setTimeout(() => {
+        if (currentPOG && currentBay) renderGrid(currentBay);
+    }, 350);
 }
 
 // --- DATA LOADING ---
@@ -189,13 +214,20 @@ function loadBay(bayNum) {
 // --- PHYSICS & RENDERING ---
 function renderGrid(bayNum) {
     const container = document.getElementById('grid-container');
+    const canvas = document.getElementById('main-canvas');
     container.innerHTML = '';
 
-    // 1. Calculate PPI (Pixels Per Inch) to Fit Screen
-    const screenWidth = document.getElementById('main-canvas').clientWidth;
-    PPI = (screenWidth - 20) / BOARD_WIDTH_INCHES;
+    // Get available space
+    const availableWidth = canvas.clientWidth - 10;  // Small margin
+    const availableHeight = canvas.clientHeight - 10;
 
-    // 2. Set Board Dimensions (FIX: was BOARD_H_HOLES, now BOARD_HEIGHT_INCHES)
+    // Calculate PPI to FIT ENTIRE BOARD on screen
+    // Use whichever dimension is more constraining
+    const ppiByWidth = availableWidth / BOARD_WIDTH_INCHES;
+    const ppiByHeight = availableHeight / BOARD_HEIGHT_INCHES;
+    PPI = Math.min(ppiByWidth, ppiByHeight);
+
+    // Set Board Dimensions
     const pxWidth = BOARD_WIDTH_INCHES * PPI;
     const pxHeight = BOARD_HEIGHT_INCHES * PPI;
 
@@ -206,7 +238,7 @@ function renderGrid(bayNum) {
     container.style.backgroundSize = `${PPI}px ${PPI}px`;
     container.style.backgroundImage = `radial-gradient(#333 15%, transparent 16%)`;
 
-    // 3. Place Items
+    // Place Items
     const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === bayNum);
     let doneCount = 0;
 
@@ -261,11 +293,11 @@ function renderGrid(bayNum) {
             img.src = imgFile;
             img.alt = item.UPC;
             img.onerror = () => {
-                box.innerHTML = `<span style="font-size:8px; text-align:center; padding:2px;">${item.UPC}</span>`;
+                box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
             };
             box.appendChild(img);
         } else {
-            box.innerHTML = `<span style="font-size:8px; text-align:center; padding:2px;">${item.UPC}</span>`;
+            box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
         }
 
         box.onclick = () => toggleComplete(item.CleanUPC, box);
@@ -376,7 +408,6 @@ function handleSearchOrScan(input) {
 function highlightItem(upc) {
     const box = document.querySelector(`.product-box[data-upc="${upc}"]`);
     if (box) {
-        box.scrollIntoView({ behavior: "smooth", block: "center" });
         box.classList.add('highlight');
         
         // Auto-mark complete when scanning
