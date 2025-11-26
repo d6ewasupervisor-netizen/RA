@@ -17,6 +17,7 @@ let allBays = [];
 let html5QrCode = null;
 let completedItems = new Set(JSON.parse(localStorage.getItem('harpa_complete') || "[]"));
 let headerCollapsed = false;
+let currentItemBox = null; // Currently selected item for the modal
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -273,6 +274,15 @@ function renderGrid(bayNum) {
         dot.style.top = `${holeY}px`;
         container.appendChild(dot);
 
+        // Peg Coordinate Label
+        const pegLabel = document.createElement('div');
+        pegLabel.className = 'peg-label';
+        pegLabel.innerText = item.Peg || `R${r} C${c}`;
+        pegLabel.style.left = `${holeLeftX}px`;
+        pegLabel.style.top = `${holeY - 10}px`;
+        pegLabel.style.transform = 'translateX(-50%)';
+        container.appendChild(pegLabel);
+
         // Frog spans C and C+1. Center is +0.5 inch from Left Leg.
         const frogCenterX = holeLeftX + (PPI / 2);
         
@@ -290,6 +300,9 @@ function renderGrid(bayNum) {
         box.style.left = `${boxLeft}px`;
         box.style.top = `${boxTop}px`;
         box.dataset.upc = item.CleanUPC;
+        
+        // Store full item data for detail modal
+        box.dataset.itemData = JSON.stringify(item);
 
         if (completedItems.has(item.CleanUPC)) {
             box.classList.add('completed');
@@ -298,6 +311,8 @@ function renderGrid(bayNum) {
 
         // Find image in file index that starts with UPC
         const imgFile = fileIndex.find(f => f.startsWith(item.UPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+        box.dataset.imgSrc = imgFile || '';
+        
         if (imgFile) {
             const img = document.createElement('img');
             img.src = imgFile;
@@ -310,7 +325,8 @@ function renderGrid(bayNum) {
             box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
         }
 
-        box.onclick = () => toggleComplete(item.CleanUPC, box);
+        // Open detail modal on click
+        box.onclick = () => openProductModal(box);
         container.appendChild(box);
     });
 
@@ -494,17 +510,88 @@ function handleSearchOrScan(input, fromScanner = false) {
 }
 
 function highlightItem(upc) {
+    // Remove any existing highlight
+    document.querySelectorAll('.product-box.highlight').forEach(el => el.classList.remove('highlight'));
+    
     const box = document.querySelector(`.product-box[data-upc="${upc}"]`);
     if (box) {
         box.classList.add('highlight');
         
-        // Auto-mark complete when scanning
-        if (!box.classList.contains('completed')) {
-            toggleComplete(upc, box);
-        }
-        
-        setTimeout(() => box.classList.remove('highlight'), 1500);
+        // Keep flashing for 5 seconds, then stop (but stay visible)
+        setTimeout(() => box.classList.remove('highlight'), 5000);
     }
+}
+
+// --- PRODUCT DETAIL MODAL ---
+function openProductModal(box) {
+    currentItemBox = box;
+    
+    const item = JSON.parse(box.dataset.itemData);
+    const imgSrc = box.dataset.imgSrc;
+    
+    // Populate modal
+    document.getElementById('detail-upc').innerText = item.UPC || '--';
+    document.getElementById('detail-desc').innerText = item.ProductDescription || item.Description || '--';
+    document.getElementById('detail-location').innerText = `Bay ${item.Bay}, ${item.Peg}`;
+    document.getElementById('detail-size').innerText = `${item.Width} × ${item.Height}`;
+    
+    const detailImg = document.getElementById('detail-image');
+    if (imgSrc) {
+        detailImg.src = imgSrc;
+        detailImg.style.display = 'block';
+    } else {
+        detailImg.src = '';
+        detailImg.style.display = 'none';
+    }
+    
+    // Update button state based on completion
+    const isCompleted = box.classList.contains('completed');
+    const setBtn = document.getElementById('btn-set-item');
+    if (isCompleted) {
+        setBtn.innerText = '↩ UNSET';
+        setBtn.style.background = '#666';
+    } else {
+        setBtn.innerText = '✓ SET COMPLETE';
+        setBtn.style.background = '';
+    }
+    
+    document.getElementById('product-modal').classList.remove('hidden');
+}
+
+function closeProductModal(event) {
+    // If called from overlay click, only close if clicking the overlay itself
+    if (event && event.target.id !== 'product-modal') return;
+    
+    document.getElementById('product-modal').classList.add('hidden');
+    currentItemBox = null;
+}
+
+function setItemComplete() {
+    if (!currentItemBox) return;
+    
+    const upc = currentItemBox.dataset.upc;
+    const isCompleted = currentItemBox.classList.contains('completed');
+    
+    if (isCompleted) {
+        // Unset - remove from completed
+        completedItems.delete(upc);
+        currentItemBox.classList.remove('completed');
+    } else {
+        // Set complete
+        completedItems.add(upc);
+        currentItemBox.classList.add('completed');
+    }
+    
+    localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
+    
+    // Update progress
+    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
+    const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
+    updateProgress(items, done);
+    
+    // Close the modal
+    document.getElementById('product-modal').classList.add('hidden');
+    currentItemBox = null;
 }
 
 // --- SWIPE NAVIGATION ---
