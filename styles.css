@@ -176,6 +176,26 @@ main {
     font-family: monospace;
 }
 
+/* Position Number Labels */
+.position-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: white;
+    color: black;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 2px 5px;
+    border: 2px solid black;
+    border-radius: 0;
+    z-index: 12;
+    pointer-events: none;
+    font-family: Arial, sans-serif;
+    line-height: 1;
+    min-width: 14px;
+    text-align: center;
+}
+
 /* The Frog (Red Dot) */
 .frog-dot {
     position: absolute;
@@ -251,6 +271,17 @@ main {
     font-family: monospace;
     color: var(--primary);
     font-weight: bold;
+}
+
+.detail-position-value {
+    display: inline-block;
+    background: white;
+    color: black;
+    font-size: 1.2rem;
+    font-weight: bold;
+    padding: 4px 10px;
+    border: 2px solid black;
+    font-family: Arial, sans-serif;
 }
 
 .product-detail-buttons {
