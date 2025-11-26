@@ -1,356 +1,442 @@
-// STATE MANAGEMENT
-const state = {
-    storeMapping: [],
-    allData: [],
-    githubFiles: [],
-    pogData: [],
-    currentStore: null,
-    currentPOG: null,
-    currentBay: 1,
-    totalBays: 1,
-    completedUPCs: JSON.parse(localStorage.getItem('harpa_completed_upcs')) || [],
-    ppu: 0 // Pixels Per Unit (Inch)
-};
+// --- CONFIGURATION ---
+const REPO_BASE = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
 
-const CONFIG = {
-    boardWidthInches: 48, // Standard 4ft section
-    boardHeightInches: 72, // Approximate usable height
-    cols: 46,
-    rows: 64
-};
+// Board Physics (1 unit = 1 inch)
+const BOARD_WIDTH_INCHES = 46;  // Col 1 to 46
+const BOARD_HEIGHT_INCHES = 64; // Row 1 to 64
 
-// DOM ELEMENTS
-const els = {
-    workspace: document.getElementById('workspace'),
-    pegboard: document.getElementById('pegboard'),
-    modalStore: document.getElementById('modal-store'),
-    modalPdf: document.getElementById('modal-pdf'),
-    modalScanner: document.getElementById('modal-scanner'),
-    pdfFrame: document.getElementById('pdf-frame'),
-    dispStore: document.getElementById('disp-store'),
-    dispPog: document.getElementById('disp-pog'),
-    dispBay: document.getElementById('disp-bay'),
-    progressFill: document.getElementById('progress-fill'),
-    scannerDebug: document.getElementById('scanner-debug'),
-    inputStore: document.getElementById('input-store-login'),
-    swipeOverlay: document.getElementById('swipe-overlay')
-};
+// --- GLOBAL VARIABLES ---
+let PPI = 0; // Pixels Per Inch (Calculated dynamically)
+let fileIndex = [];
+let pogData = [];
+let storeMap = [];
+let currentStore = null;
+let currentPOG = null;
+let currentBay = 1;
+let allBays = [];
+let html5QrCode = null;
+let completedItems = new Set(JSON.parse(localStorage.getItem('harpa_complete') || "[]"));
 
-// 1. INITIALIZATION
-window.addEventListener('DOMContentLoaded', () => {
-    calculatePPU();
-    loadCSVData();
-    setupEventListeners();
+// --- INIT ---
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+    setupSwipe();
 });
 
-function calculatePPU() {
-    // Fit 48 inches into screen width
-    const screenWidth = window.innerWidth;
-    state.ppu = (screenWidth - 4) / CONFIG.boardWidthInches; // -4 for borders
+async function init() {
+    try {
+        await loadCSVData();
+        document.getElementById('loading-overlay').classList.add('hidden');
+        
+        const savedStore = localStorage.getItem('harpa_store');
+        if (savedStore) {
+            loadStoreLogic(savedStore);
+        } else {
+            document.getElementById('store-modal').classList.remove('hidden');
+        }
+    } catch (e) {
+        console.error("Data Load Error:", e);
+        document.getElementById('loading-overlay').innerHTML = `
+            <div class="modal-card">
+                <h3>⚠️ Data Load Error</h3>
+                <p style="color:#666; margin:10px 0;">${e.message}</p>
+                <p style="font-size:0.8rem;">Check that CSV files exist in the repo.</p>
+            </div>
+        `;
+    }
+
+    // Event Bindings
+    document.getElementById('btn-load-store').onclick = () => 
+        loadStoreLogic(document.getElementById('store-input').value.trim());
     
-    // Set background grid size based on PPU (1 inch squares)
-    els.pegboard.style.backgroundSize = `${state.ppu}px ${state.ppu}px`;
-    els.pegboard.style.width = `${state.ppu * CONFIG.boardWidthInches}px`;
-    els.pegboard.style.height = `${state.ppu * CONFIG.boardHeightInches}px`;
+    document.getElementById('store-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') loadStoreLogic(document.getElementById('store-input').value.trim());
+    });
+    
+    document.getElementById('btn-scan-toggle').onclick = startScanner;
+    
+    document.getElementById('btn-manual-search').onclick = () => 
+        handleSearchOrScan(document.getElementById('search-input').value.trim());
+    
+    document.getElementById('search-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearchOrScan(document.getElementById('search-input').value.trim());
+    });
 }
 
+// --- DATA LOADING ---
 async function loadCSVData() {
-    try {
-        const [mappingRes, dataRes, filesRes] = await Promise.all([
-            fetch('Store_POG_Mapping.csv'),
-            fetch('allplanogramdata.csv'),
-            fetch('githubfiles.csv')
-        ]);
+    const ts = Date.now();
+    
+    const [filesResp, pogsResp, mapsResp] = await Promise.all([
+        fetch(`githubfiles.csv?t=${ts}`),
+        fetch(`allplanogramdata.csv?t=${ts}`),
+        fetch(`Store_POG_Mapping.csv?t=${ts}`)
+    ]);
+    
+    if (!filesResp.ok) throw new Error("githubfiles.csv not found");
+    if (!pogsResp.ok) throw new Error("allplanogramdata.csv not found");
+    if (!mapsResp.ok) throw new Error("Store_POG_Mapping.csv not found");
 
-        state.storeMapping = parseCSV(await mappingRes.text());
-        state.allData = parseCSV(await dataRes.text());
-        
-        // Normalize github files list for easier search
-        const rawFiles = parseCSV(await filesRes.text());
-        // Assuming githubfiles.csv has a column 'Filename'
-        state.githubFiles = rawFiles.map(row => Object.values(row)[0]); 
+    const [files, pogs, maps] = await Promise.all([
+        filesResp.text(),
+        pogsResp.text(),
+        mapsResp.text()
+    ]);
 
-    } catch (e) {
-        alert("Error loading data files. Ensure CSVs are in root.");
-        console.error(e);
-    }
+    fileIndex = files.split('\n').map(l => l.trim()).filter(l => l);
+    pogData = parseCSV(pogs).map(i => ({...i, CleanUPC: normalizeUPC(i.UPC)}));
+    storeMap = parseCSV(maps);
+    
+    console.log(`Loaded: ${fileIndex.length} files, ${pogData.length} products, ${storeMap.length} store mappings`);
 }
 
 function parseCSV(text) {
-    const lines = text.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim());
-    return lines.slice(1).map(line => {
-        const values = line.split(',');
+    const lines = text.split('\n').filter(l => l.trim());
+    if (lines.length === 0) return [];
+    
+    const headers = parseCSVLine(lines[0]);
+    const res = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const row = parseCSVLine(lines[i]);
+        if (row.length < headers.length) continue;
+        
         let obj = {};
-        headers.forEach((h, i) => obj[h] = values[i] ? values[i].trim() : '');
-        return obj;
-    });
+        headers.forEach((h, j) => obj[h] = row[j] || "");
+        res.push(obj);
+    }
+    return res;
 }
 
-// 2. STORE LOGIC
-document.getElementById('btn-load-store').addEventListener('click', () => {
-    const storeNum = els.inputStore.value.trim();
-    const mapEntry = state.storeMapping.find(r => r.Store === storeNum);
+// Handle quoted CSV fields properly
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
     
-    if (mapEntry) {
-        state.currentStore = storeNum;
-        state.currentPOG = mapEntry.POG;
-        loadPOG(state.currentPOG);
-        els.modalStore.classList.remove('active');
-        updateHeader();
-    } else {
-        document.getElementById('login-error').innerText = "Store not found.";
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
     }
-});
+    result.push(current.trim());
+    return result;
+}
 
-document.getElementById('btn-switch-store').addEventListener('click', () => {
-    els.modalStore.classList.add('active');
-});
-
-function loadPOG(pogID) {
-    // Filter Master Data
-    state.pogData = state.allData.filter(item => item.POG === pogID);
+// --- STORE LOGIC ---
+function loadStoreLogic(storeNum) {
+    if (!storeNum) return;
     
-    if (state.pogData.length === 0) {
-        alert("No items found for this POG ID.");
+    const map = storeMap.find(s => s.Store === storeNum);
+    if (!map) {
+        document.getElementById('error-msg').classList.remove('hidden');
+        setTimeout(() => document.getElementById('error-msg').classList.add('hidden'), 3000);
         return;
     }
-
-    // Calculate Bays
-    const bays = [...new Set(state.pogData.map(i => parseInt(i.Bay)))];
-    state.totalBays = Math.max(...bays);
-    state.currentBay = 1;
     
-    renderBay(state.currentBay);
-}
+    currentStore = storeNum;
+    currentPOG = map.POG;
+    localStorage.setItem('harpa_store', storeNum);
 
-// 3. RENDERING
-function renderBay(bayNum) {
-    els.pegboard.innerHTML = ''; // Clear board
-    const bayItems = state.pogData.filter(i => parseInt(i.Bay) === bayNum);
-    
     // Update UI
-    els.dispBay.innerText = `Bay ${bayNum} of ${state.totalBays}`;
-    updateProgress();
+    document.getElementById('store-modal').classList.add('hidden');
+    document.getElementById('store-display').innerText = `Store: ${storeNum}`;
+    document.getElementById('pog-display').innerText = `POG: ${currentPOG}`;
 
-    bayItems.forEach(item => {
-        createProductElement(item);
-    });
-}
-
-function createProductElement(item) {
-    // Parse Coordinate "R02 C03"
-    const parts = item.Peg.split(' ');
-    const row = parseInt(parts[0].replace('R', ''));
-    const col = parseInt(parts[1].replace('C', ''));
-
-    // Coordinates
-    const topPx = row * state.ppu;
-    // "Product hangs centered between Col C and C+1". Center of C is col * ppu. Center of gap is (col + 0.5) * ppu
-    const leftPx = (col + 0.5) * state.ppu; 
-
-    // Container
-    const el = document.createElement('div');
-    el.className = 'product-item';
-    el.dataset.upc = item.UPC;
+    // Find Bays
+    const items = pogData.filter(i => i.POG === currentPOG);
+    allBays = [...new Set(items.map(i => parseInt(i.Bay)))].filter(b => !isNaN(b)).sort((a, b) => a - b);
     
-    // Position
-    el.style.top = `${topPx}px`;
-    el.style.left = `${leftPx}px`;
-    
-    // Logic: If we assume the item hangs DOWN from the peg, no calc needed.
-    // But we need to center the image visually horizontally on the peg hole gap.
-    // We apply a transform to center the element itself.
-    el.style.transform = 'translateX(-50%)';
-
-    // The Red Frog Dot (The actual peg hole is at col integer, but user puts peg in hole C and C+1)
-    // The prompt says: "Red Dot rendered at exact (Row, Col) coordinate"
-    // Since container is centered at (col+0.5), we need to offset the dot to be at (col).
-    const dot = document.createElement('div');
-    dot.className = 'frog-dot';
-    // Dot needs to be at (col * ppu). Container is at (col+0.5 * ppu).
-    // Difference is -0.5 * ppu.
-    dot.style.left = 'calc(50% - ' + (state.ppu * 0.5) + 'px)';
-    dot.style.top = '0px';
-
-    // Image
-    const img = document.createElement('img');
-    img.className = 'product-img';
-    img.style.width = `${(item.Width || 3) * state.ppu}px`; // Default 3 inches if missing
-    img.style.height = `${(item.Height || 4) * state.ppu}px`; // Default 4 inches
-    
-    // Image source resolution
-    const fileName = findImageFile(item.UPC);
-    img.src = fileName ? fileName : `https://via.placeholder.com/50?text=${item.UPC}`;
-    
-    // Click to Toggle Complete
-    el.onclick = () => toggleComplete(item.UPC, el);
-
-    // Check completion state
-    if (state.completedUPCs.includes(item.UPC)) {
-        el.classList.add('completed');
+    if (allBays.length > 0) {
+        loadBay(allBays[0]);
+    } else {
+        document.getElementById('grid-container').innerHTML = '<div class="empty-state">No items found for this Planogram.</div>';
     }
-
-    el.appendChild(dot);
-    el.appendChild(img);
-    els.pegboard.appendChild(el);
 }
 
-function findImageFile(upc) {
-    // Look in githubfiles for exact match or match with leading zero logic
-    // For MVP, assuming filename starts with UPC
-    return state.githubFiles.find(f => f.includes(upc));
+function resetStore() {
+    localStorage.removeItem('harpa_store');
+    location.reload();
+}
+
+// --- BAY LOGIC ---
+function changeBay(dir) {
+    const idx = allBays.indexOf(currentBay);
+    if (idx === -1) return;
+    
+    let newIdx = idx + dir;
+    newIdx = Math.max(0, Math.min(newIdx, allBays.length - 1));
+    
+    if (allBays[newIdx] !== currentBay) {
+        loadBay(allBays[newIdx]);
+    }
+}
+
+function loadBay(bayNum) {
+    currentBay = bayNum;
+    const bayIndex = allBays.indexOf(bayNum) + 1;
+    document.getElementById('bay-indicator').innerText = `Bay ${bayIndex} of ${allBays.length}`;
+    renderGrid(bayNum);
+}
+
+// --- PHYSICS & RENDERING ---
+function renderGrid(bayNum) {
+    const container = document.getElementById('grid-container');
+    container.innerHTML = '';
+
+    // 1. Calculate PPI (Pixels Per Inch) to Fit Screen
+    const screenWidth = document.getElementById('main-canvas').clientWidth;
+    PPI = (screenWidth - 20) / BOARD_WIDTH_INCHES;
+
+    // 2. Set Board Dimensions (FIX: was BOARD_H_HOLES, now BOARD_HEIGHT_INCHES)
+    const pxWidth = BOARD_WIDTH_INCHES * PPI;
+    const pxHeight = BOARD_HEIGHT_INCHES * PPI;
+
+    container.style.width = `${pxWidth}px`;
+    container.style.height = `${pxHeight}px`;
+    
+    // Visual Grid Dots: 1 inch spacing = PPI
+    container.style.backgroundSize = `${PPI}px ${PPI}px`;
+    container.style.backgroundImage = `radial-gradient(#333 15%, transparent 16%)`;
+
+    // 3. Place Items
+    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === bayNum);
+    let doneCount = 0;
+
+    items.forEach(item => {
+        const { r, c } = getCoords(item.Peg);
+        
+        // Parse Dimensions (remove " in" suffix)
+        const h = parseFloat((item.Height || "6").replace(/\s*in/i, '')) || 6;
+        const w = parseFloat((item.Width || "3").replace(/\s*in/i, '')) || 3;
+
+        // --- FROG LOGIC ---
+        // Hole (c, r) is the Left Leg.
+        // Hole Center X = (c - 1) * PPI + (PPI/2)
+        // Hole Center Y = (r - 1) * PPI + (PPI/2)
+        const holeLeftX = ((c - 1) * PPI) + (PPI / 2);
+        const holeY = ((r - 1) * PPI) + (PPI / 2);
+
+        // Visual Red Dot (Frog Left Leg)
+        const dot = document.createElement('div');
+        dot.className = 'frog-dot';
+        dot.style.left = `${holeLeftX}px`;
+        dot.style.top = `${holeY}px`;
+        container.appendChild(dot);
+
+        // Frog spans C and C+1. Center is +0.5 inch from Left Leg.
+        const frogCenterX = holeLeftX + (PPI / 2);
+        
+        // Product is centered horizontally on Frog Center
+        const boxLeft = frogCenterX - ((w * PPI) / 2);
+        
+        // Product hangs DOWN from the hole row
+        const boxTop = holeY + (PPI * 0.5);
+
+        // Render Box
+        const box = document.createElement('div');
+        box.className = 'product-box';
+        box.style.width = `${w * PPI}px`;
+        box.style.height = `${h * PPI}px`;
+        box.style.left = `${boxLeft}px`;
+        box.style.top = `${boxTop}px`;
+        box.dataset.upc = item.CleanUPC;
+
+        if (completedItems.has(item.CleanUPC)) {
+            box.classList.add('completed');
+            doneCount++;
+        }
+
+        // Find image in file index that starts with UPC
+        const imgFile = fileIndex.find(f => f.startsWith(item.UPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+        if (imgFile) {
+            const img = document.createElement('img');
+            img.src = imgFile;
+            img.alt = item.UPC;
+            img.onerror = () => {
+                box.innerHTML = `<span style="font-size:8px; text-align:center; padding:2px;">${item.UPC}</span>`;
+            };
+            box.appendChild(img);
+        } else {
+            box.innerHTML = `<span style="font-size:8px; text-align:center; padding:2px;">${item.UPC}</span>`;
+        }
+
+        box.onclick = () => toggleComplete(item.CleanUPC, box);
+        container.appendChild(box);
+    });
+
+    // Update Progress
+    updateProgress(items, doneCount);
+}
+
+function updateProgress(items, doneCount) {
+    const total = items.length;
+    const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+    document.getElementById('progress-fill').style.width = `${pct}%`;
+    document.getElementById('progress-count').innerText = `${doneCount}/${total}`;
+}
+
+// Helper: Convert "R02 C03" to integers
+function getCoords(pegStr) {
+    if (!pegStr) return { r: 1, c: 1 };
+    const m = pegStr.match(/R(\d+)\s*C(\d+)/i);
+    if (m) return { r: parseInt(m[1]), c: parseInt(m[2]) };
+    return { r: 1, c: 1 };
+}
+
+// --- UPC LOGIC ---
+function normalizeUPC(upc) {
+    if (!upc) return "";
+    // Remove leading zeros for matching
+    return upc.toString().trim().replace(/^0+/, '');
 }
 
 function toggleComplete(upc, el) {
-    if (state.completedUPCs.includes(upc)) {
-        state.completedUPCs = state.completedUPCs.filter(u => u !== upc);
+    if (completedItems.has(upc)) {
+        completedItems.delete(upc);
         el.classList.remove('completed');
     } else {
-        state.completedUPCs.push(upc);
+        completedItems.add(upc);
         el.classList.add('completed');
     }
-    localStorage.setItem('harpa_completed_upcs', JSON.stringify(state.completedUPCs));
-    updateProgress();
-}
-
-function updateProgress() {
-    const bayItems = state.pogData.filter(i => parseInt(i.Bay) === state.currentBay);
-    const total = bayItems.length;
-    if(total === 0) return;
+    localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
     
-    const completed = bayItems.filter(i => state.completedUPCs.includes(i.UPC)).length;
-    const pct = (completed / total) * 100;
-    els.progressFill.style.width = `${pct}%`;
+    // Update progress
+    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
+    const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
+    updateProgress(items, done);
 }
 
-function updateHeader() {
-    els.dispStore.innerText = `Store: ${state.currentStore}`;
-    els.dispPog.innerText = `POG: ${state.currentPOG}`;
-}
-
-// 4. SCANNER & SEARCH
-let html5QrcodeScanner = null;
-
-document.getElementById('btn-scan').addEventListener('click', () => {
-    els.modalScanner.classList.add('active');
-    startScanner();
-});
-
+// --- SCANNER & SEARCH ---
 function startScanner() {
-    html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader", { fps: 10, qrbox: 250 });
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    const modal = document.getElementById('scanner-modal');
+    modal.classList.remove('hidden');
+    
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+        { facingMode: "environment" }, 
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+            handleSearchOrScan(decodedText);
+        },
+        (err) => { /* Ignore scan errors */ }
+    ).catch(e => {
+        alert("Camera Error: " + e);
+        stopScanner();
+    });
 }
 
 function stopScanner() {
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear().then(() => {
-            els.modalScanner.classList.remove('active');
-        }).catch(error => console.error(error));
+    if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+            document.getElementById('scanner-modal').classList.add('hidden');
+            html5QrCode.clear();
+            html5QrCode = null;
+        }).catch(() => {
+            document.getElementById('scanner-modal').classList.add('hidden');
+        });
     } else {
-        els.modalScanner.classList.remove('active');
+        document.getElementById('scanner-modal').classList.add('hidden');
     }
 }
 
-function onScanSuccess(decodedText) {
-    // Strip leading zeros
-    let cleanUPC = decodedText.replace(/^0+/, '');
-    els.scannerDebug.innerText = `Last Scanned: ${cleanUPC}`;
+function handleSearchOrScan(input) {
+    if (!input) return;
     
-    stopScanner(); // Close camera on success
-    handleSearch(cleanUPC);
-}
-
-function onScanFailure(error) {
-    // console.warn(`Code scan error = ${error}`);
-}
-
-// Manual Search
-document.getElementById('btn-manual-go').addEventListener('click', () => {
-    const input = document.getElementById('input-manual').value.trim();
-    const cleanUPC = input.replace(/^0+/, '');
-    handleSearch(cleanUPC);
-});
-
-function handleSearch(upc) {
-    const item = state.pogData.find(i => i.UPC === upc);
+    const clean = normalizeUPC(input);
     
-    if (!item) {
-        alert(`UPC ${upc} not found in this Planogram.`);
+    // Display for debugging
+    document.getElementById('scan-result').innerText = `${input} → ${clean}`;
+
+    // Search GLOBALLY (All Bays in current POG)
+    const match = pogData.find(i => i.POG === currentPOG && i.CleanUPC === clean);
+    
+    if (!match) {
+        document.getElementById('scan-result').innerText = `${input} → NOT FOUND`;
         return;
     }
 
-    // If in different bay, switch
-    if (parseInt(item.Bay) !== state.currentBay) {
-        state.currentBay = parseInt(item.Bay);
-        renderBay(state.currentBay);
-    }
-
-    // Highlight logic
-    const targetEl = document.querySelector(`.product-item[data-upc="${upc}"]`);
-    if (targetEl) {
-        targetEl.scrollIntoView({behavior: "smooth", block: "center"});
-        targetEl.classList.add('highlight');
-        setTimeout(() => targetEl.classList.remove('highlight'), 3000);
-        
-        // Auto-mark complete on scan? (Optional, usually desired)
-        if (!state.completedUPCs.includes(upc)) {
-            toggleComplete(upc, targetEl);
-        }
-    }
-}
-
-// 5. NAVIGATION & PDF
-document.getElementById('nav-prev').addEventListener('click', () => changeBay(-1));
-document.getElementById('nav-next').addEventListener('click', () => changeBay(1));
-
-function changeBay(dir) {
-    const newBay = state.currentBay + dir;
-    if (newBay > 0 && newBay <= state.totalBays) {
-        state.currentBay = newBay;
-        showSwipeOverlay(newBay);
-        renderBay(state.currentBay);
-    }
-}
-
-function showSwipeOverlay(num) {
-    els.swipeOverlay.innerText = num;
-    els.swipeOverlay.classList.remove('hidden');
-    setTimeout(() => els.swipeOverlay.classList.add('hidden'), 500);
-}
-
-// PDF
-document.getElementById('btn-pdf').addEventListener('click', () => {
-    const pdfFile = state.githubFiles.find(f => f.includes(state.currentPOG) && f.endsWith('.pdf'));
-    if (pdfFile) {
-        els.pdfFrame.src = pdfFile;
-        els.modalPdf.classList.add('active');
+    // Check if we need to change bays
+    const itemBay = parseInt(match.Bay);
+    if (itemBay !== currentBay) {
+        loadBay(itemBay);
+        setTimeout(() => highlightItem(clean), 400);
     } else {
-        alert("PDF Hard Copy not found for this POG.");
+        highlightItem(clean);
     }
-});
+}
 
-window.closeModal = (id) => {
-    document.getElementById(id).classList.remove('active');
-};
+function highlightItem(upc) {
+    const box = document.querySelector(`.product-box[data-upc="${upc}"]`);
+    if (box) {
+        box.scrollIntoView({ behavior: "smooth", block: "center" });
+        box.classList.add('highlight');
+        
+        // Auto-mark complete when scanning
+        if (!box.classList.contains('completed')) {
+            toggleComplete(upc, box);
+        }
+        
+        setTimeout(() => box.classList.remove('highlight'), 1500);
+    }
+}
 
-// 6. GESTURES (SWIPE)
-function setupEventListeners() {
-    let touchstartX = 0;
-    let touchendX = 0;
+// --- SWIPE NAVIGATION ---
+function setupSwipe() {
+    let xDown = null;
+    const canvas = document.getElementById('main-canvas');
     
-    els.workspace.addEventListener('touchstart', e => {
-        touchstartX = e.changedTouches[0].screenX;
-    });
+    canvas.addEventListener('touchstart', (evt) => {
+        xDown = evt.touches[0].clientX;
+    }, { passive: true });
 
-    els.workspace.addEventListener('touchend', e => {
-        touchendX = e.changedTouches[0].screenX;
-        handleGesture();
-    });
+    canvas.addEventListener('touchend', (evt) => {
+        if (!xDown) return;
+        
+        const xUp = evt.changedTouches[0].clientX;
+        const xDiff = xDown - xUp;
+        
+        if (Math.abs(xDiff) > 50) {
+            if (xDiff > 0) changeBay(1);  // Left swipe -> Next
+            else changeBay(-1);            // Right swipe -> Prev
+        }
+        xDown = null;
+    }, { passive: true });
+}
 
-    function handleGesture() {
-        if (touchendX < touchstartX - 50) changeBay(1); // Swipe Left -> Next Bay
-        if (touchendX > touchstartX + 50) changeBay(-1); // Swipe Right -> Prev Bay
+// --- PDF VIEWER ---
+function openPDF() {
+    if (!currentPOG) {
+        alert("Select a store first");
+        return;
+    }
+    
+    const pdf = fileIndex.find(f => f.includes(currentPOG) && f.toLowerCase().endsWith('.pdf'));
+    if (pdf) {
+        document.getElementById('pdf-frame').src = pdf;
+        document.getElementById('pdf-modal').classList.remove('hidden');
+    } else {
+        alert("PDF not found for this planogram.");
+    }
+}
+
+function closePDF() {
+    document.getElementById('pdf-modal').classList.add('hidden');
+    document.getElementById('pdf-frame').src = "";
+}
+
+// --- UTILITY ---
+function clearAllProgress() {
+    if (confirm("Clear ALL progress for this planogram?")) {
+        completedItems.clear();
+        localStorage.removeItem('harpa_complete');
+        loadBay(currentBay);
     }
 }
