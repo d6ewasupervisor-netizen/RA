@@ -364,7 +364,7 @@ main {
 
 .product-detail-buttons {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     padding: 12px 16px;
     background: #f9f9f9;
     border-top: 1px solid #eee;
@@ -373,12 +373,12 @@ main {
 
 .btn-set {
     flex: 2;
-    padding: 12px;
+    padding: 12px 8px;
     background: var(--success);
     color: white;
     border: none;
     border-radius: 8px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: bold;
     cursor: pointer;
 }
@@ -387,14 +387,30 @@ main {
     background: #388E3C;
 }
 
+.btn-skip {
+    flex: 1;
+    padding: 12px 8px;
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn-skip:active {
+    background: #f57c00;
+}
+
 .btn-close-detail {
     flex: 1;
-    padding: 12px;
+    padding: 12px 8px;
     background: #666;
     color: white;
     border: none;
     border-radius: 8px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: bold;
     cursor: pointer;
 }
