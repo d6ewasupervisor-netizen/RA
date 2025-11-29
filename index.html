@@ -84,6 +84,14 @@
         <span class="expand-arrow">▼</span>
     </button>
 
+    <!-- Bay Change Overlay -->
+    <div id="bay-overlay" class="bay-overlay hidden">
+        <div class="bay-overlay-content">
+            <div class="bay-overlay-label">BAY</div>
+            <div id="bay-overlay-number" class="bay-overlay-number">1</div>
+        </div>
+    </div>
+
     <!-- MAIN HEADER (collapsible) -->
     <header id="main-header">
         <div class="header-top">
@@ -92,6 +100,7 @@
                 <span id="pog-display">POG: --</span>
             </div>
             <div class="header-btns">
+                <button onclick="startOver()" class="btn-mini btn-danger">Start Over</button>
                 <button onclick="openPDF()" class="btn-mini">PDF</button>
                 <button onclick="resetStore()" class="btn-mini">Switch</button>
                 <button onclick="toggleHeader()" class="btn-mini btn-collapse">▲</button>
