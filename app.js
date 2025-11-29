@@ -177,6 +177,13 @@ function loadStoreLogic(storeNum) {
         return;
     }
     
+    // Check if this is a different store than before - if so, clear progress
+    const previousStore = localStorage.getItem('harpa_store');
+    if (previousStore && previousStore !== storeNum) {
+        completedItems.clear();
+        localStorage.removeItem('harpa_complete');
+    }
+    
     currentStore = storeNum;
     currentPOG = map.POG;
     localStorage.setItem('harpa_store', storeNum);
@@ -198,8 +205,25 @@ function loadStoreLogic(storeNum) {
 }
 
 function resetStore() {
+    // Clear completed items when changing stores
+    completedItems.clear();
+    localStorage.removeItem('harpa_complete');
     localStorage.removeItem('harpa_store');
     location.reload();
+}
+
+function startOver() {
+    // Show confirmation
+    if (!confirm('Are you sure you want to reset all items to unset? This will clear all progress for this store.')) {
+        return;
+    }
+    
+    // Clear all completed items
+    completedItems.clear();
+    localStorage.removeItem('harpa_complete');
+    
+    // Re-render current bay to update visual state
+    renderGrid(currentBay);
 }
 
 // --- BAY LOGIC ---
@@ -211,15 +235,33 @@ function changeBay(dir) {
     newIdx = Math.max(0, Math.min(newIdx, allBays.length - 1));
     
     if (allBays[newIdx] !== currentBay) {
-        loadBay(allBays[newIdx]);
+        loadBay(allBays[newIdx], true); // true = show overlay
     }
 }
 
-function loadBay(bayNum) {
+function loadBay(bayNum, showOverlay = false) {
     currentBay = bayNum;
     const bayIndex = allBays.indexOf(bayNum) + 1;
     document.getElementById('bay-indicator').innerText = `Bay ${bayIndex} of ${allBays.length}`;
     renderGrid(bayNum);
+    
+    // Show bay change overlay if navigating between bays
+    if (showOverlay) {
+        showBayOverlay(bayIndex);
+    }
+}
+
+function showBayOverlay(bayIndex) {
+    const overlay = document.getElementById('bay-overlay');
+    const bayNumber = document.getElementById('bay-overlay-number');
+    
+    bayNumber.innerText = bayIndex;
+    overlay.classList.remove('hidden');
+    
+    // Remove after animation
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+    }, 1200);
 }
 
 // --- PHYSICS & RENDERING ---
@@ -667,26 +709,61 @@ function findProductBoxByPosition(position) {
     return null;
 }
 
-// --- SWIPE NAVIGATION ---
+// --- SWIPE NAVIGATION (Swipe + Hold) ---
 function setupSwipe() {
     let xDown = null;
+    let swipeDirection = 0;
+    let holdTimer = null;
+    let swipeTriggered = false;
     const canvas = document.getElementById('main-canvas');
+    const HOLD_DURATION = 400; // ms to hold after swipe
+    const SWIPE_THRESHOLD = 60; // px minimum swipe distance
     
     canvas.addEventListener('touchstart', (evt) => {
         xDown = evt.touches[0].clientX;
+        swipeDirection = 0;
+        swipeTriggered = false;
+        clearTimeout(holdTimer);
     }, { passive: true });
 
-    canvas.addEventListener('touchend', (evt) => {
-        if (!xDown) return;
+    canvas.addEventListener('touchmove', (evt) => {
+        if (!xDown || swipeTriggered) return;
         
-        const xUp = evt.changedTouches[0].clientX;
-        const xDiff = xDown - xUp;
+        const xCurrent = evt.touches[0].clientX;
+        const xDiff = xDown - xCurrent;
         
-        if (Math.abs(xDiff) > 50) {
-            if (xDiff > 0) changeBay(1);  // Left swipe -> Next
-            else changeBay(-1);            // Right swipe -> Prev
+        // Check if swipe threshold reached
+        if (Math.abs(xDiff) > SWIPE_THRESHOLD) {
+            const newDirection = xDiff > 0 ? 1 : -1;
+            
+            // If direction changed or just started, reset timer
+            if (newDirection !== swipeDirection) {
+                swipeDirection = newDirection;
+                clearTimeout(holdTimer);
+                
+                // Start hold timer
+                holdTimer = setTimeout(() => {
+                    if (swipeDirection !== 0 && !swipeTriggered) {
+                        swipeTriggered = true;
+                        // Vibrate if available
+                        if (navigator.vibrate) navigator.vibrate(50);
+                        changeBay(swipeDirection);
+                    }
+                }, HOLD_DURATION);
+            }
         }
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', () => {
         xDown = null;
+        swipeDirection = 0;
+        clearTimeout(holdTimer);
+    }, { passive: true });
+    
+    canvas.addEventListener('touchcancel', () => {
+        xDown = null;
+        swipeDirection = 0;
+        clearTimeout(holdTimer);
     }, { passive: true });
 }
 
