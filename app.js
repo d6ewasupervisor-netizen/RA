@@ -607,27 +607,64 @@ function setItemComplete() {
     
     const upc = currentItemBox.dataset.upc;
     const isCompleted = currentItemBox.classList.contains('completed');
+    const currentItem = JSON.parse(currentItemBox.dataset.itemData);
+    const currentPosition = parseInt(currentItem.Position) || 0;
     
     if (isCompleted) {
         // Unset - remove from completed
         completedItems.delete(upc);
         currentItemBox.classList.remove('completed');
+        localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
+        
+        // Update progress
+        const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
+        const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
+        updateProgress(items, done);
+        
+        // Just close the modal when unsetting
+        document.getElementById('product-modal').classList.add('hidden');
+        currentItemBox = null;
     } else {
         // Set complete
         completedItems.add(upc);
         currentItemBox.classList.add('completed');
+        localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
+        
+        // Update progress
+        const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
+        const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
+        updateProgress(items, done);
+        
+        // Find next item by position number
+        const nextPosition = currentPosition + 1;
+        const nextBox = findProductBoxByPosition(nextPosition);
+        
+        if (nextBox) {
+            // Auto-advance to next item
+            currentItemBox = null;
+            openProductModal(nextBox);
+        } else {
+            // No next item, close modal
+            document.getElementById('product-modal').classList.add('hidden');
+            currentItemBox = null;
+        }
     }
-    
-    localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
-    
-    // Update progress
-    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
-    const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
-    updateProgress(items, done);
-    
-    // Close the modal
-    document.getElementById('product-modal').classList.add('hidden');
-    currentItemBox = null;
+}
+
+// Helper function to find product box by position number
+function findProductBoxByPosition(position) {
+    const boxes = document.querySelectorAll('.product-box');
+    for (const box of boxes) {
+        try {
+            const itemData = JSON.parse(box.dataset.itemData);
+            if (parseInt(itemData.Position) === position) {
+                return box;
+            }
+        } catch (e) {
+            continue;
+        }
+    }
+    return null;
 }
 
 // --- SWIPE NAVIGATION ---
