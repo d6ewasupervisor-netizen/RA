@@ -573,13 +573,26 @@ function handleSearchOrScan(input, fromScanner = false) {
     // Use the matched item's CleanUPC for highlighting
     const matchedUPC = match.CleanUPC;
 
+    // Collapse header to show full bay (zoom out effect)
+    if (!headerCollapsed) {
+        const header = document.getElementById('main-header');
+        const expandBtn = document.getElementById('btn-expand');
+        headerCollapsed = true;
+        header.classList.add('collapsed');
+        expandBtn.classList.remove('hidden');
+    }
+
     // Check if we need to change bays
     const itemBay = parseInt(match.Bay);
     if (itemBay !== currentBay) {
-        loadBay(itemBay);
-        setTimeout(() => highlightItem(matchedUPC), 400);
+        // Load the new bay and show overlay
+        loadBay(itemBay, true);
+        // Wait for bay to render, then highlight
+        setTimeout(() => highlightItem(matchedUPC), 600);
     } else {
-        highlightItem(matchedUPC);
+        // Re-render current bay to ensure full view
+        renderGrid(currentBay);
+        setTimeout(() => highlightItem(matchedUPC), 100);
     }
     
     return true; // Found
@@ -707,6 +720,53 @@ function findProductBoxByPosition(position) {
         }
     }
     return null;
+}
+
+// Skip to next unset item in the bay
+function skipToNextUnset() {
+    if (!currentItemBox) {
+        closeProductModal();
+        return;
+    }
+    
+    const currentItem = JSON.parse(currentItemBox.dataset.itemData);
+    const currentPosition = parseInt(currentItem.Position) || 0;
+    
+    // Get all items in current bay sorted by position
+    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
+    const sortedItems = items.sort((a, b) => (parseInt(a.Position) || 0) - (parseInt(b.Position) || 0));
+    
+    // Find next unset item after current position
+    let nextUnsetBox = null;
+    
+    // First, look for items after current position
+    for (const item of sortedItems) {
+        const pos = parseInt(item.Position) || 0;
+        if (pos > currentPosition && !completedItems.has(item.CleanUPC)) {
+            nextUnsetBox = findProductBoxByPosition(pos);
+            if (nextUnsetBox) break;
+        }
+    }
+    
+    // If nothing found after, wrap around to beginning
+    if (!nextUnsetBox) {
+        for (const item of sortedItems) {
+            const pos = parseInt(item.Position) || 0;
+            if (pos !== currentPosition && !completedItems.has(item.CleanUPC)) {
+                nextUnsetBox = findProductBoxByPosition(pos);
+                if (nextUnsetBox) break;
+            }
+        }
+    }
+    
+    if (nextUnsetBox) {
+        currentItemBox = null;
+        openProductModal(nextUnsetBox);
+    } else {
+        // All items are set, close modal
+        document.getElementById('product-modal').classList.add('hidden');
+        currentItemBox = null;
+    }
 }
 
 // --- SWIPE NAVIGATION (Swipe + Hold) ---
