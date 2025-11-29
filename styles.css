@@ -45,7 +45,65 @@ h1 { font-size: 1.1rem; color: var(--primary); margin: 0; }
 .header-btns { display: flex; gap: 5px; }
 .btn-mini { padding: 4px 8px; font-size: 0.75rem; background: #eee; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
 .btn-mini:active { background: #ddd; }
+.btn-mini.btn-danger { background: #ffebee; border-color: #ef9a9a; color: #c62828; }
+.btn-mini.btn-danger:active { background: #ffcdd2; }
 .btn-collapse { font-weight: bold; }
+
+/* Bay Change Overlay */
+.bay-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 500;
+    animation: bay-overlay-fade 1.2s ease-out forwards;
+}
+
+.bay-overlay.hidden {
+    display: none;
+}
+
+.bay-overlay-content {
+    text-align: center;
+    animation: bay-flash 0.4s ease-in-out 3;
+}
+
+.bay-overlay-label {
+    color: #00ff00;
+    font-size: 2rem;
+    font-weight: bold;
+    text-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00;
+    letter-spacing: 8px;
+}
+
+.bay-overlay-number {
+    color: #00ff00;
+    font-size: 8rem;
+    font-weight: bold;
+    text-shadow: 0 0 30px #00ff00, 0 0 60px #00ff00, 0 0 90px #00ff00;
+    line-height: 1;
+}
+
+@keyframes bay-overlay-fade {
+    0%, 80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@keyframes bay-flash {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
+}
 
 .tools-container { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .btn-scan-large { 
