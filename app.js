@@ -309,9 +309,19 @@ function renderGrid(bayNum) {
             doneCount++;
         }
 
-        // Find image in file index that starts with UPC
-        const imgFile = fileIndex.find(f => f.startsWith(item.UPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+        // Find image in file index that starts with UPC (handle both raw UPC and cleaned UPC)
+        let imgFile = fileIndex.find(f => f.startsWith(item.UPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+        
+        // Also try with CleanUPC (no leading zeros) in case filename doesn't have them
+        if (!imgFile && item.CleanUPC !== item.UPC) {
+            imgFile = fileIndex.find(f => f.startsWith(item.CleanUPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+        }
+        
         box.dataset.imgSrc = imgFile || '';
+        
+        // Extract description from filename if image exists
+        const filenameDesc = extractDescriptionFromFilename(imgFile);
+        box.dataset.filenameDesc = filenameDesc || '';
         
         if (imgFile) {
             const img = document.createElement('img');
@@ -337,6 +347,17 @@ function renderGrid(bayNum) {
 
     // Update Progress
     updateProgress(items, doneCount);
+}
+
+// Helper function to extract description from image filename
+function extractDescriptionFromFilename(filename) {
+    if (!filename) return null;
+    // Remove file extension
+    const noExt = filename.replace(/\.(jpg|jpeg|png|gif|webp)$/i, '');
+    // Remove UPC (leading digits) and separator (space or underscore)
+    const desc = noExt.replace(/^\d+[\s_]?/, '');
+    // Replace underscores with spaces and clean up
+    return desc.replace(/_/g, ' ').trim() || null;
 }
 
 // Helper function to add position label
@@ -541,11 +562,12 @@ function openProductModal(box) {
     
     const item = JSON.parse(box.dataset.itemData);
     const imgSrc = box.dataset.imgSrc;
+    const filenameDesc = box.dataset.filenameDesc;
     
-    // Populate modal
+    // Populate modal - use filename description if available, otherwise fall back to CSV
     document.getElementById('detail-position').innerText = item.Position || '--';
     document.getElementById('detail-upc').innerText = item.UPC || '--';
-    document.getElementById('detail-desc').innerText = item.ProductDescription || item.Description || '--';
+    document.getElementById('detail-desc').innerText = filenameDesc || item.ProductDescription || item.Description || '--';
     document.getElementById('detail-location').innerText = `Bay ${item.Bay}, ${item.Peg}`;
     document.getElementById('detail-size').innerText = `${item.Width} × ${item.Height}`;
     
