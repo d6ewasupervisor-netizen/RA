@@ -565,10 +565,10 @@ function openProductModal(box) {
     const filenameDesc = box.dataset.filenameDesc;
     
     // Populate modal - use filename description if available, otherwise fall back to CSV
+    document.getElementById('detail-peg').innerText = item.Peg || `R-- C--`;
     document.getElementById('detail-position').innerText = item.Position || '--';
     document.getElementById('detail-upc').innerText = item.UPC || '--';
     document.getElementById('detail-desc').innerText = filenameDesc || item.ProductDescription || item.Description || '--';
-    document.getElementById('detail-location').innerText = `Bay ${item.Bay}, ${item.Peg}`;
     document.getElementById('detail-size').innerText = `${item.Width} × ${item.Height}`;
     
     const detailImg = document.getElementById('detail-image');
