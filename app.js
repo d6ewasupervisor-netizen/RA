@@ -3,7 +3,7 @@
 const REPO_BASE = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
 
 // Board Physics (1 unit = 1 inch)
-const BOARD_WIDTH_INCHES = 46;  // Col 1 to 46
+const BOARD_WIDTH_INCHES = 48;  // Col 1 to 46 + extra space for products
 const BOARD_HEIGHT_INCHES = 64; // Row 1 to 64
 
 // === GLOBAL VARIABLES ===
@@ -528,32 +528,64 @@ function setupSwipe() {
 let isProcessingScan = false;
 
 function startScanner() {
-    if (html5QrCode) return;
+    // Prevent multiple instances
+    if (html5QrCode) {
+        console.log("Scanner already running");
+        return;
+    }
     
     const modal = document.getElementById('scanner-modal');
+    const readerDiv = document.getElementById('reader');
+    
+    // Clear any previous content
+    readerDiv.innerHTML = '';
+    
     modal.classList.remove('hidden');
     isProcessingScan = false;
     if (!audioContext) initAudio();
     
-    html5QrCode = new Html5Qrcode("reader");
-    
-    const scanConfig = { fps: 10, qrbox: { width: 280, height: 150 } };
-    
-    html5QrCode.start(
-        { facingMode: "environment" }, 
-        scanConfig,
-        (decodedText) => {
-            if (isProcessingScan) return;
-            isProcessingScan = true;
-            console.log(`📷 RAW SCAN: "${decodedText}"`);
+    try {
+        html5QrCode = new Html5Qrcode("reader");
+        
+        const scanConfig = { 
+            fps: 10, 
+            qrbox: { width: 280, height: 150 },
+            formatsToSupport: [ 
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.QR_CODE
+            ]
+        };
+        
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            scanConfig,
+            (decodedText) => {
+                if (isProcessingScan) return;
+                isProcessingScan = true;
+                console.log(`📷 RAW SCAN: "${decodedText}"`);
+                
+                // Vibrate on successful scan
+                if (navigator.vibrate) navigator.vibrate(100);
+                
+                stopScanner();
+                setTimeout(() => handleSearchOrScan(decodedText, true), 100);
+            },
+            (err) => { /* Ignore scan errors */ }
+        ).catch(e => {
+            console.error("Camera start error:", e);
+            alert("Camera Error: " + e.message || e);
             stopScanner();
-            setTimeout(() => handleSearchOrScan(decodedText, true), 100);
-        },
-        (err) => { }
-    ).catch(e => {
-        alert("Camera Error: " + e);
-        stopScanner();
-    });
+        });
+    } catch (e) {
+        console.error("Scanner init error:", e);
+        alert("Scanner initialization failed: " + e.message || e);
+        modal.classList.add('hidden');
+    }
 }
 
 function stopScanner() {
@@ -562,10 +594,15 @@ function stopScanner() {
     
     if (html5QrCode) {
         html5QrCode.stop().then(() => {
-            html5QrCode.clear();
+            try {
+                html5QrCode.clear();
+            } catch (e) {
+                console.log("Scanner clear warning:", e);
+            }
             html5QrCode = null;
             isProcessingScan = false;
-        }).catch(() => {
+        }).catch((e) => {
+            console.log("Scanner stop warning:", e);
             html5QrCode = null;
             isProcessingScan = false;
         });
@@ -582,14 +619,17 @@ function handleSearchOrScan(input, fromScanner = false) {
     const clean = normalizeUPC(input);
     const cleanNoCheckDigit = clean.length > 1 ? clean.slice(0, -1) : clean;
     
-    document.getElementById('scan-result').innerText = `Searching: ${cleanNoCheckDigit}`;
+    const scanResult = document.getElementById('scan-result');
+    scanResult.className = ''; // Reset classes
+    scanResult.innerText = `Searching: ${cleanNoCheckDigit}`;
 
     // Check for DELETE item first
     const deleteMatch = checkForDelete(clean, cleanNoCheckDigit);
     if (deleteMatch) {
         playDeleteSound();
         showDeleteOverlay(deleteMatch.UPC || cleanNoCheckDigit, deleteMatch.Product || 'Unknown Item');
-        document.getElementById('scan-result').innerText = `🗑️ DELETE: ${deleteMatch.Product || cleanNoCheckDigit}`;
+        scanResult.innerText = `🗑️ DELETE: ${deleteMatch.Product || cleanNoCheckDigit}`;
+        scanResult.className = 'delete';
         return true;
     }
 
@@ -597,6 +637,8 @@ function handleSearchOrScan(input, fromScanner = false) {
     if (itemsInPOG.length === 0) {
         playNotFoundSound();
         showNotFoundOverlay();
+        scanResult.innerText = `"${cleanNoCheckDigit}" not found`;
+        scanResult.className = 'not-found';
         return false;
     }
 
@@ -605,7 +647,8 @@ function handleSearchOrScan(input, fromScanner = false) {
     if (matches.length === 0) {
         playNotFoundSound();
         showNotFoundOverlay();
-        document.getElementById('scan-result').innerText = `"${cleanNoCheckDigit}" not found`;
+        scanResult.innerText = `"${cleanNoCheckDigit}" not found`;
+        scanResult.className = 'not-found';
         return false;
     }
 
@@ -643,7 +686,10 @@ function showMatchAtIndex(index, showOverlay = false) {
     
     let resultText = `✓ Bay ${match.Bay}, Pos ${match.Position}, ${match.Peg}`;
     if (currentMatches.length > 1) resultText += ` (${index + 1} of ${currentMatches.length})`;
-    document.getElementById('scan-result').innerText = resultText;
+    
+    const scanResult = document.getElementById('scan-result');
+    scanResult.innerText = resultText;
+    scanResult.className = 'found';
     
     if (currentMatches.length > 1) showMultiMatchBar();
     else hideMultiMatchBar();
@@ -838,9 +884,24 @@ function setItemComplete() {
 }
 
 function showRowChangeToast(row) {
-    document.getElementById('row-toast-text').innerText = `⬇️ Moving to Row ${row}`;
-    document.getElementById('row-toast').classList.remove('hidden');
-    setTimeout(() => document.getElementById('row-toast').classList.add('hidden'), 2000);
+    const toast = document.getElementById('row-toast');
+    const toastText = document.getElementById('row-toast-text');
+    
+    // Reset animation by removing and re-adding class
+    toast.classList.remove('show');
+    toast.classList.add('hidden');
+    
+    // Force reflow to reset animation
+    void toast.offsetWidth;
+    
+    toastText.innerText = `⬇️ Moving to Row ${row}`;
+    toast.classList.remove('hidden');
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('show');
+    }, 2500);
 }
 
 function findProductBoxByPosition(position) {
@@ -1008,12 +1069,36 @@ function closeMinimap(event) {
 
 // === PDF VIEWER ===
 function openPDF() {
-    const pdfName = `pog_${currentPOG}.pdf`;
-    document.getElementById('pdf-frame').src = pdfName;
-    document.getElementById('pdf-modal').classList.remove('hidden');
+    if (!currentPOG) {
+        alert('No POG selected');
+        return;
+    }
+    
+    // Find PDF in fileIndex that ends with _{POG}.pdf
+    const pdfFile = fileIndex.find(f => f.endsWith(`_${currentPOG}.pdf`));
+    
+    if (!pdfFile) {
+        alert(`PDF not found for POG ${currentPOG}`);
+        console.log('Looking for PDF ending with:', `_${currentPOG}.pdf`);
+        console.log('Available PDFs:', fileIndex.filter(f => f.endsWith('.pdf')));
+        return;
+    }
+    
+    const pdfFrame = document.getElementById('pdf-frame');
+    const pdfModal = document.getElementById('pdf-modal');
+    
+    if (pdfFrame && pdfModal) {
+        pdfFrame.src = pdfFile;
+        pdfModal.classList.remove('hidden');
+    } else {
+        console.error('PDF elements not found');
+    }
 }
 
 function closePDF() {
-    document.getElementById('pdf-modal').classList.add('hidden');
-    document.getElementById('pdf-frame').src = '';
+    const pdfModal = document.getElementById('pdf-modal');
+    const pdfFrame = document.getElementById('pdf-frame');
+    
+    if (pdfModal) pdfModal.classList.add('hidden');
+    if (pdfFrame) pdfFrame.src = '';
 }
