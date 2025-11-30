@@ -296,6 +296,8 @@ function loadStoreLogic(storeNum) {
 
 function resetStore() {
     localStorage.removeItem('harpa_store');
+    localStorage.removeItem('harpa_complete');
+    completedItems.clear();
     location.reload();
 }
 
