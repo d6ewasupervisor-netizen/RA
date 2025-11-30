@@ -6,12 +6,17 @@
     <title>PEGASUS - Planogram Execution Guide</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐴</text></svg>">
+    <link rel="icon" type="image/png" href="PEGASUS_Application_Logo.png">
+    <link rel="apple-touch-icon" href="PEGASUS_Application_Logo.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="PEGASUS">
 </head>
 <body>
     <!-- Modal: Loading -->
     <div id="loading-overlay" class="modal-overlay">
         <div class="modal-card">
+            <img src="PEGASUS_Application_Logo.png" alt="PEGASUS" class="app-logo">
             <div class="spinner"></div>
             <h3>Initializing PEGASUS...</h3>
             <p style="font-size: 0.75rem; color: #888; margin-top: 8px;">Planogram Execution Guide And Store User Support</p>
@@ -21,7 +26,7 @@
     <!-- Modal: Store Selection -->
     <div id="store-modal" class="modal-overlay hidden">
         <div class="modal-card">
-            <h2>🐴 PEGASUS</h2>
+            <img src="PEGASUS_Application_Logo.png" alt="PEGASUS" class="app-logo">
             <p style="font-size: 0.8rem; color: #666; margin-bottom: 15px;">Select Your Store</p>
             <input type="number" id="store-input" class="input-box" placeholder="Enter Store #">
             <button id="btn-load-store" class="btn-primary">Load Planogram</button>
