@@ -449,7 +449,18 @@ function normalizeUPC(upc) {
     // Convert to string, trim whitespace, remove any \r characters
     let cleaned = upc.toString().trim().replace(/\r/g, '');
     
-    // Remove any non-numeric characters (some scanners add extra chars)
+    // Fix common barcode scanner OCR misreads BEFORE removing non-numeric
+    // These characters look similar and scanners often confuse them
+    cleaned = cleaned
+        .replace(/[OoQq]/g, '0')  // O, o, Q, q → 0
+        .replace(/[IilL|]/g, '1') // I, i, l, L, | → 1
+        .replace(/[Ss\$]/g, '5')  // S, s, $ → 5
+        .replace(/[Bb]/g, '8')    // B, b → 8
+        .replace(/[Zz]/g, '2')    // Z, z → 2
+        .replace(/[Gg]/g, '6')    // G, g → 6
+        .replace(/[Tt]/g, '7');   // T, t → 7
+    
+    // Remove any remaining non-numeric characters
     cleaned = cleaned.replace(/[^0-9]/g, '');
     
     // Strip ALL leading zeros
@@ -485,14 +496,42 @@ function startScanner() {
     modal.classList.remove('hidden');
     isProcessingScan = false;
     
-    html5QrCode = new Html5Qrcode("reader");
+    // Configure scanner for better barcode recognition
+    let html5Config = {};
+    try {
+        if (typeof Html5QrcodeSupportedFormats !== 'undefined') {
+            html5Config.formatsToSupport = [
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39
+            ];
+        }
+    } catch(e) {
+        console.log("Using default barcode formats");
+    }
+    
+    html5QrCode = new Html5Qrcode("reader", html5Config);
+    
+    const scanConfig = {
+        fps: 10,
+        qrbox: { width: 280, height: 150 } // Wider box for barcodes
+    };
+    
     html5QrCode.start(
         { facingMode: "environment" }, 
-        { fps: 10, qrbox: 250 },
+        scanConfig,
         (decodedText) => {
             // Prevent multiple scans while processing
             if (isProcessingScan) return;
             isProcessingScan = true;
+            
+            // Log raw scan for debugging
+            console.log(`📷 RAW SCAN: "${decodedText}"`);
+            const cleaned = normalizeUPC(decodedText);
+            console.log(`🔧 CLEANED UPC: "${cleaned}"`);
             
             // IMMEDIATELY close the scanner first
             stopScanner();
