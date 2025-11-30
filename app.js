@@ -65,27 +65,34 @@ async function init() {
     
     document.getElementById('btn-scan-toggle').onclick = startScanner;
     
-    document.getElementById('btn-manual-search').onclick = () => 
-        handleSearchOrScan(document.getElementById('search-input').value.trim(), false);
+    document.getElementById('btn-manual-search').onclick = () => {
+        const input = document.getElementById('search-input');
+        handleSearchOrScan(input.value.trim(), false);
+        input.value = ''; // Clear input after search
+    };
     
     document.getElementById('search-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearchOrScan(document.getElementById('search-input').value.trim(), false);
+        if (e.key === 'Enter') {
+            const input = document.getElementById('search-input');
+            handleSearchOrScan(input.value.trim(), false);
+            input.value = ''; // Clear input after search
+        }
     });
 }
 
 // --- HEADER COLLAPSE/EXPAND ---
 function toggleHeader() {
     const header = document.getElementById('main-header');
-    const expandBtn = document.getElementById('btn-expand');
+    const floatingBtns = document.getElementById('floating-btns');
     
     headerCollapsed = !headerCollapsed;
     
     if (headerCollapsed) {
         header.classList.add('collapsed');
-        expandBtn.classList.remove('hidden');
+        floatingBtns.classList.remove('hidden');
     } else {
         header.classList.remove('collapsed');
-        expandBtn.classList.add('hidden');
+        floatingBtns.classList.add('hidden');
     }
     
     // Re-render grid after transition to use new available space
@@ -689,10 +696,10 @@ function showMatchAtIndex(index, showOverlay = false) {
     // Collapse header to show full bay (zoom out effect)
     if (!headerCollapsed) {
         const header = document.getElementById('main-header');
-        const expandBtn = document.getElementById('btn-expand');
+        const floatingBtns = document.getElementById('floating-btns');
         headerCollapsed = true;
         header.classList.add('collapsed');
-        expandBtn.classList.remove('hidden');
+        floatingBtns.classList.remove('hidden');
     }
     
     // Show overlay if requested (first time finding item)
