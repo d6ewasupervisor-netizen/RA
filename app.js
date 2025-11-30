@@ -143,6 +143,7 @@ function toggleHeader() {
         header.classList.remove('collapsed');
         floatingBtns.classList.add('hidden');
     }
+    // Re-render to claim new space
     setTimeout(() => { if (currentPOG && currentBay) renderGrid(currentBay); }, 350);
 }
 
@@ -188,8 +189,9 @@ async function loadCSVData() {
         mapsResp.text()
     ]);
 
-    // fileIndex is an array of filename STRINGS
+    // fileIndex is an array of filename STRINGS (Fixed from broken object version)
     fileIndex = files.split('\n').map(l => l.trim()).filter(l => l);
+    
     pogData = parseCSV(pogs).map(i => ({...i, CleanUPC: normalizeUPC(i.UPC)}));
     storeMap = parseCSV(maps);
     
@@ -373,7 +375,8 @@ function renderGrid(bayNum) {
         pegLabel.className = 'peg-label';
         pegLabel.innerText = item.Peg || `R${r} C${c}`;
         pegLabel.style.left = `${holeLeftX}px`;
-        pegLabel.style.top = `${holeY - 10}px`;
+        // Move label slightly higher so it's not hidden
+        pegLabel.style.top = `${holeY - 12}px`;
         pegLabel.style.transform = 'translateX(-50%)';
         container.appendChild(pegLabel);
 
@@ -396,7 +399,7 @@ function renderGrid(bayNum) {
             doneCount++;
         }
 
-        // Check for repeated UPC
+        // Check for repeated UPC (Facing badge)
         const upcCount = upcCounts[item.CleanUPC] || 1;
         if (upcCount > 1) {
             box.classList.add('repeated-upc');
@@ -409,9 +412,10 @@ function renderGrid(bayNum) {
             box.dataset.facingInfo = `${facingIndex} of ${upcCount}`;
         }
 
-        // Find image - fileIndex is array of filename STRINGS
+        // Find image - Restore string matching logic
         let imgFile = fileIndex.find(f => f.startsWith(item.UPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
         if (!imgFile && item.CleanUPC !== item.UPC) {
+            // Fallback to searching by CleanUPC
             imgFile = fileIndex.find(f => f.startsWith(item.CleanUPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
         }
         
@@ -424,11 +428,13 @@ function renderGrid(bayNum) {
             img.src = imgFile;
             img.alt = item.UPC;
             img.onerror = () => {
+                // If image fails to load, fallback to UPC text
                 box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
                 addPositionLabel(box, item.Position);
             };
             box.appendChild(img);
         } else {
+            // No image found
             box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
         }
 
@@ -648,11 +654,9 @@ function showMatchAtIndex(index, showOverlay = false) {
     if (currentMatches.length > 1) showMultiMatchBar();
     else hideMultiMatchBar();
     
-    // Collapse header
+    // Collapse header to show view
     if (!headerCollapsed) {
-        headerCollapsed = true;
-        document.getElementById('main-header').classList.add('collapsed');
-        document.getElementById('floating-btns').classList.remove('hidden');
+        toggleHeader(); 
     }
     
     if (showOverlay) {
