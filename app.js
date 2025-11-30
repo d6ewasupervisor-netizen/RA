@@ -3,7 +3,7 @@
 const REPO_BASE = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
 
 // Board Physics (1 unit = 1 inch)
-const BOARD_WIDTH_INCHES = 46;  // Col 1 to 46
+const BOARD_WIDTH_INCHES = 48;  // Col 1 to 46 + extra space for products
 const BOARD_HEIGHT_INCHES = 64; // Row 1 to 64
 
 // === GLOBAL VARIABLES ===
@@ -1069,12 +1069,26 @@ function closeMinimap(event) {
 
 // === PDF VIEWER ===
 function openPDF() {
+    if (!currentPOG) {
+        alert('No POG selected');
+        return;
+    }
     const pdfName = `pog_${currentPOG}.pdf`;
-    document.getElementById('pdf-frame').src = pdfName;
-    document.getElementById('pdf-modal').classList.remove('hidden');
+    const pdfFrame = document.getElementById('pdf-frame');
+    const pdfModal = document.getElementById('pdf-modal');
+    
+    if (pdfFrame && pdfModal) {
+        pdfFrame.src = pdfName;
+        pdfModal.classList.remove('hidden');
+    } else {
+        console.error('PDF elements not found');
+    }
 }
 
 function closePDF() {
-    document.getElementById('pdf-modal').classList.add('hidden');
-    document.getElementById('pdf-frame').src = '';
+    const pdfModal = document.getElementById('pdf-modal');
+    const pdfFrame = document.getElementById('pdf-frame');
+    
+    if (pdfModal) pdfModal.classList.add('hidden');
+    if (pdfFrame) pdfFrame.src = '';
 }
