@@ -80,10 +80,15 @@
         </div>
     </div>
 
-    <!-- EXPAND BUTTON (shown when header collapsed) -->
-    <button id="btn-expand" class="expand-btn hidden" onclick="toggleHeader()">
-        <span class="expand-arrow">▼</span>
-    </button>
+    <!-- FLOATING BUTTONS (shown when header collapsed) -->
+    <div id="floating-btns" class="floating-btns hidden">
+        <button id="btn-float-scan" class="float-btn" onclick="startScanner()">
+            <span class="float-icon">🔍</span>
+        </button>
+        <button id="btn-expand" class="float-btn" onclick="toggleHeader()">
+            <span class="expand-arrow">▼</span>
+        </button>
+    </div>
 
     <!-- Bay Change Overlay -->
     <div id="bay-overlay" class="bay-overlay hidden">
@@ -147,7 +152,7 @@
             
             <div class="manual-search-row">
                 <input type="text" id="search-input" placeholder="Manual UPC Entry...">
-                <button id="btn-manual-search" class="btn-go">GO</button>
+                <button id="btn-manual-search" class="btn-go">Search</button>
             </div>
             
             <div id="scan-debug">Last Scanned: <span id="scan-result">--</span></div>
