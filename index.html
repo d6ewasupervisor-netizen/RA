@@ -93,6 +93,39 @@
         </div>
     </div>
 
+    <!-- Delete Item Overlay -->
+    <div id="delete-overlay" class="delete-overlay hidden">
+        <div class="delete-overlay-content">
+            <div class="delete-overlay-label">DELETE</div>
+            <div id="delete-overlay-upc" class="delete-overlay-upc"></div>
+            <div id="delete-overlay-desc" class="delete-overlay-desc"></div>
+        </div>
+    </div>
+
+    <!-- Item Found Overlay -->
+    <div id="found-overlay" class="found-overlay hidden">
+        <div class="found-overlay-content">
+            <div class="found-overlay-label">Item Found</div>
+            <div id="found-overlay-bay" class="found-overlay-bay"></div>
+            <div id="found-overlay-position" class="found-overlay-position"></div>
+            <div id="found-overlay-peg" class="found-overlay-peg"></div>
+        </div>
+    </div>
+
+    <!-- Item Not Found Overlay -->
+    <div id="notfound-overlay" class="notfound-overlay hidden">
+        <div class="notfound-overlay-content">
+            <div class="notfound-overlay-label">Item Not Found!</div>
+        </div>
+    </div>
+
+    <!-- Multiple Matches Navigation Bar -->
+    <div id="multi-match-bar" class="multi-match-bar hidden">
+        <button id="btn-prev-match" class="btn-match-nav" onclick="showPrevMatch()">◀ PREV</button>
+        <span id="match-indicator" class="match-indicator">1 of 3</span>
+        <button id="btn-next-match" class="btn-match-nav" onclick="showNextMatch()">NEXT ▶</button>
+    </div>
+
     <!-- MAIN HEADER (collapsible) -->
     <header id="main-header">
         <div class="header-top">
