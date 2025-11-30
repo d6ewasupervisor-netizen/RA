@@ -10,6 +10,7 @@ let PPI = 0; // Pixels Per Inch (Calculated dynamically)
 let fileIndex = [];
 let pogData = [];
 let storeMap = [];
+let deleteData = []; // Items to be deleted
 let currentStore = null;
 let currentPOG = null;
 let currentBay = 1;
@@ -18,6 +19,10 @@ let html5QrCode = null;
 let completedItems = new Set(JSON.parse(localStorage.getItem('harpa_complete') || "[]"));
 let headerCollapsed = false;
 let currentItemBox = null; // Currently selected item for the modal
+
+// Multi-match navigation state
+let currentMatches = []; // Array of matched items
+let currentMatchIndex = 0; // Which match we're currently showing
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -93,10 +98,11 @@ function toggleHeader() {
 async function loadCSVData() {
     const ts = Date.now();
     
-    const [filesResp, pogsResp, mapsResp] = await Promise.all([
+    const [filesResp, pogsResp, mapsResp, deletesResp] = await Promise.all([
         fetch(`githubfiles.csv?t=${ts}`),
         fetch(`allplanogramdata.csv?t=${ts}`),
-        fetch(`Store_POG_Mapping.csv?t=${ts}`)
+        fetch(`Store_POG_Mapping.csv?t=${ts}`),
+        fetch(`Deletes.csv?t=${ts}`).catch(() => null) // Optional file
     ]);
     
     if (!filesResp.ok) throw new Error("githubfiles.csv not found");
@@ -112,6 +118,16 @@ async function loadCSVData() {
     fileIndex = files.split('\n').map(l => l.trim()).filter(l => l);
     pogData = parseCSV(pogs).map(i => ({...i, CleanUPC: normalizeUPC(i.UPC)}));
     storeMap = parseCSV(maps);
+    
+    // Load deletes data if file exists
+    if (deletesResp && deletesResp.ok) {
+        const deletesText = await deletesResp.text();
+        deleteData = parseCSV(deletesText).map(i => ({...i, CleanUPC: normalizeUPC(i.UPC)}));
+        console.log(`Loaded: ${deleteData.length} delete items`);
+    } else {
+        deleteData = [];
+        console.log("Deletes.csv not found - skipping delete checks");
+    }
     
     console.log(`Loaded: ${fileIndex.length} files, ${pogData.length} products, ${storeMap.length} store mappings`);
     
@@ -514,65 +530,123 @@ function stopScanner() {
 function handleSearchOrScan(input, fromScanner = false) {
     if (!input) return false;
     
+    // Hide any existing multi-match bar
+    hideMultiMatchBar();
+    
     const clean = normalizeUPC(input);
     // Also prepare version without check digit (last digit of UPC-A is check digit)
     const cleanNoCheckDigit = clean.length > 1 ? clean.slice(0, -1) : clean;
     
-    // Display for debugging - show the version without check digit since that's what we're matching
+    // Display for debugging
     document.getElementById('scan-result').innerText = `Searching: ${cleanNoCheckDigit}`;
     console.log(`=== SEARCH DEBUG ===`);
     console.log(`Raw input: "${input}"`);
     console.log(`Cleaned (no leading zeros): "${clean}"`);
     console.log(`Without check digit: "${cleanNoCheckDigit}"`);
     console.log(`Current POG: "${currentPOG}"`);
+    console.log(`From scanner: ${fromScanner}`);
 
-    // First check if we have items for this POG
+    // FIRST: Check if this is a DELETE item for this POG
+    const deleteMatch = checkForDelete(clean, cleanNoCheckDigit);
+    if (deleteMatch) {
+        showDeleteOverlay(deleteMatch.UPC || cleanNoCheckDigit, deleteMatch.Product || 'Unknown Item');
+        document.getElementById('scan-result').innerText = `🗑️ DELETE: ${deleteMatch.Product || cleanNoCheckDigit}`;
+        return true; // Handled as delete
+    }
+
+    // Get items in current POG
     const itemsInPOG = pogData.filter(i => i.POG === currentPOG);
     console.log(`Items in POG "${currentPOG}": ${itemsInPOG.length}`);
     
     if (itemsInPOG.length === 0) {
-        const allPOGs = [...new Set(pogData.map(i => i.POG))];
-        console.log(`POG not found! Available POGs:`, allPOGs.slice(0, 10));
+        showNotFoundOverlay();
         document.getElementById('scan-result').innerText = `POG "${currentPOG}" has no items`;
         return false;
     }
 
-    // Try multiple matching strategies:
-    // 1. Exact match (rare - data usually doesn't have check digit)
-    // 2. Without trailing check digit (most common - scanner adds check digit, data doesn't have it)
-    // 3. Data has check digit but scan doesn't
+    // Find ALL matches using multiple strategies
+    let matches = findAllMatches(itemsInPOG, clean, cleanNoCheckDigit, fromScanner);
     
-    let match = itemsInPOG.find(i => i.CleanUPC === clean);
-    
-    if (!match) {
-        // Try without the check digit (most common case)
-        match = itemsInPOG.find(i => i.CleanUPC === cleanNoCheckDigit);
-        if (match) {
-            console.log(`Matched by removing check digit: "${clean}" → "${cleanNoCheckDigit}"`);
-        }
-    }
-    
-    if (!match) {
-        // Try matching where data has check digit but scan doesn't
-        match = itemsInPOG.find(i => i.CleanUPC.slice(0, -1) === clean);
-        if (match) {
-            console.log(`Matched by ignoring data's check digit`);
-        }
-    }
-    
-    if (!match) {
+    if (matches.length === 0) {
+        showNotFoundOverlay();
         document.getElementById('scan-result').innerText = `"${cleanNoCheckDigit}" not found`;
         console.log(`UPC "${clean}" not found (also tried "${cleanNoCheckDigit}")`);
-        console.log(`Sample CleanUPCs:`, itemsInPOG.slice(0, 10).map(i => i.CleanUPC));
         return false;
     }
 
-    console.log(`✓ Found match:`, match);
-    document.getElementById('scan-result').innerText = `✓ Bay ${match.Bay}, ${match.Peg}`;
+    console.log(`✓ Found ${matches.length} match(es):`, matches);
+    
+    // Store matches for navigation
+    currentMatches = matches;
+    currentMatchIndex = 0;
+    
+    // Show the first match
+    showMatchAtIndex(0, true); // true = show overlay
+    
+    return true;
+}
 
-    // Use the matched item's CleanUPC for highlighting
-    const matchedUPC = match.CleanUPC;
+// Find all matching items in the POG
+function findAllMatches(itemsInPOG, clean, cleanNoCheckDigit, fromScanner) {
+    let matches = [];
+    
+    // For manual search with short input (4 digits or less), do fuzzy search
+    if (!fromScanner && clean.length <= 4) {
+        // Fuzzy search: find items where UPC ends with these digits
+        matches = itemsInPOG.filter(i => 
+            i.CleanUPC.endsWith(clean) || i.CleanUPC.endsWith(cleanNoCheckDigit)
+        );
+        console.log(`Fuzzy search for "${clean}" found ${matches.length} matches`);
+    } else {
+        // Exact matching strategies - find ALL matches (same UPC can appear multiple times)
+        
+        // Strategy 1: Exact match
+        let exactMatches = itemsInPOG.filter(i => i.CleanUPC === clean);
+        
+        // Strategy 2: Without check digit
+        if (exactMatches.length === 0) {
+            exactMatches = itemsInPOG.filter(i => i.CleanUPC === cleanNoCheckDigit);
+        }
+        
+        // Strategy 3: Data has check digit but scan doesn't
+        if (exactMatches.length === 0) {
+            exactMatches = itemsInPOG.filter(i => i.CleanUPC.slice(0, -1) === clean);
+        }
+        
+        matches = exactMatches;
+    }
+    
+    // Sort by Bay then Position for consistent ordering
+    matches.sort((a, b) => {
+        const bayDiff = parseInt(a.Bay) - parseInt(b.Bay);
+        if (bayDiff !== 0) return bayDiff;
+        return (parseInt(a.Position) || 0) - (parseInt(b.Position) || 0);
+    });
+    
+    return matches;
+}
 
+// Show a specific match by index
+function showMatchAtIndex(index, showOverlay = false) {
+    if (index < 0 || index >= currentMatches.length) return;
+    
+    currentMatchIndex = index;
+    const match = currentMatches[index];
+    
+    // Update scan result
+    let resultText = `✓ Bay ${match.Bay}, Pos ${match.Position}, ${match.Peg}`;
+    if (currentMatches.length > 1) {
+        resultText += ` (${index + 1} of ${currentMatches.length})`;
+    }
+    document.getElementById('scan-result').innerText = resultText;
+    
+    // Show/hide multi-match navigation bar
+    if (currentMatches.length > 1) {
+        showMultiMatchBar();
+    } else {
+        hideMultiMatchBar();
+    }
+    
     // Collapse header to show full bay (zoom out effect)
     if (!headerCollapsed) {
         const header = document.getElementById('main-header');
@@ -581,21 +655,100 @@ function handleSearchOrScan(input, fromScanner = false) {
         header.classList.add('collapsed');
         expandBtn.classList.remove('hidden');
     }
-
-    // Check if we need to change bays
-    const itemBay = parseInt(match.Bay);
-    if (itemBay !== currentBay) {
-        // Load the new bay and show overlay
-        loadBay(itemBay, true);
-        // Wait for bay to render, then highlight
-        setTimeout(() => highlightItem(matchedUPC), 600);
+    
+    // Show overlay if requested (first time finding item)
+    if (showOverlay) {
+        showFoundOverlay(match);
+        
+        // After overlay fades, navigate to item
+        setTimeout(() => {
+            navigateToMatch(match);
+        }, 2500);
     } else {
-        // Re-render current bay to ensure full view
+        // Navigate immediately
+        navigateToMatch(match);
+    }
+}
+
+// Navigate to a specific match's bay and highlight it
+function navigateToMatch(match) {
+    const matchedUPC = match.CleanUPC;
+    const itemBay = parseInt(match.Bay);
+    
+    if (itemBay !== currentBay) {
+        // Load the new bay (without overlay since we're navigating between matches)
+        loadBay(itemBay, false);
+        setTimeout(() => highlightItem(matchedUPC), 300);
+    } else {
         renderGrid(currentBay);
         setTimeout(() => highlightItem(matchedUPC), 100);
     }
+}
+
+// Show next match
+function showNextMatch() {
+    if (currentMatches.length === 0) return;
+    const nextIndex = (currentMatchIndex + 1) % currentMatches.length;
+    showMatchAtIndex(nextIndex, false);
+}
+
+// Show previous match
+function showPrevMatch() {
+    if (currentMatches.length === 0) return;
+    const prevIndex = (currentMatchIndex - 1 + currentMatches.length) % currentMatches.length;
+    showMatchAtIndex(prevIndex, false);
+}
+
+// Show/hide multi-match navigation bar
+function showMultiMatchBar() {
+    const bar = document.getElementById('multi-match-bar');
+    const indicator = document.getElementById('match-indicator');
+    const prevBtn = document.getElementById('btn-prev-match');
+    const nextBtn = document.getElementById('btn-next-match');
     
-    return true; // Found
+    indicator.innerText = `${currentMatchIndex + 1} of ${currentMatches.length}`;
+    
+    // Update button states
+    prevBtn.disabled = currentMatches.length <= 1;
+    nextBtn.disabled = currentMatches.length <= 1;
+    
+    bar.classList.remove('hidden');
+}
+
+function hideMultiMatchBar() {
+    document.getElementById('multi-match-bar').classList.add('hidden');
+    currentMatches = [];
+    currentMatchIndex = 0;
+}
+
+// Show "Item Found" overlay
+function showFoundOverlay(match) {
+    const overlay = document.getElementById('found-overlay');
+    const bayEl = document.getElementById('found-overlay-bay');
+    const posEl = document.getElementById('found-overlay-position');
+    const pegEl = document.getElementById('found-overlay-peg');
+    
+    bayEl.innerText = `Bay ${match.Bay}`;
+    posEl.innerText = `Position ${match.Position || '--'}`;
+    pegEl.innerText = match.Peg || 'R-- C--';
+    
+    overlay.classList.remove('hidden');
+    
+    // Remove after animation (3 seconds based on CSS)
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+    }, 3000);
+}
+
+// Show "Item Not Found" overlay
+function showNotFoundOverlay() {
+    const overlay = document.getElementById('notfound-overlay');
+    overlay.classList.remove('hidden');
+    
+    // Remove after animation (3 seconds based on CSS)
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+    }, 3000);
 }
 
 function highlightItem(upc) {
@@ -609,6 +762,50 @@ function highlightItem(upc) {
         // Keep flashing for 5 seconds, then stop (but stay visible)
         setTimeout(() => box.classList.remove('highlight'), 5000);
     }
+}
+
+// Check if scanned UPC is in the delete list for current POG
+function checkForDelete(cleanUPC, cleanNoCheckDigit) {
+    if (!deleteData || deleteData.length === 0) return null;
+    
+    // Filter to current POG
+    const deletesInPOG = deleteData.filter(d => d.POG === currentPOG);
+    if (deletesInPOG.length === 0) return null;
+    
+    // Try exact match
+    let match = deletesInPOG.find(d => d.CleanUPC === cleanUPC);
+    
+    // Try without check digit
+    if (!match) {
+        match = deletesInPOG.find(d => d.CleanUPC === cleanNoCheckDigit);
+    }
+    
+    // Try where delete data has check digit but scan doesn't
+    if (!match) {
+        match = deletesInPOG.find(d => d.CleanUPC.slice(0, -1) === cleanUPC);
+    }
+    
+    if (match) {
+        console.log(`🗑️ DELETE ITEM FOUND:`, match);
+    }
+    
+    return match;
+}
+
+// Show the DELETE overlay
+function showDeleteOverlay(upc, description) {
+    const overlay = document.getElementById('delete-overlay');
+    const upcEl = document.getElementById('delete-overlay-upc');
+    const descEl = document.getElementById('delete-overlay-desc');
+    
+    upcEl.innerText = upc;
+    descEl.innerText = description;
+    overlay.classList.remove('hidden');
+    
+    // Remove after animation (4 seconds based on CSS)
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+    }, 4000);
 }
 
 // --- PRODUCT DETAIL MODAL ---
