@@ -1073,12 +1073,22 @@ function openPDF() {
         alert('No POG selected');
         return;
     }
-    const pdfName = `pog_${currentPOG}.pdf`;
+    
+    // Find PDF in fileIndex that ends with _{POG}.pdf
+    const pdfFile = fileIndex.find(f => f.endsWith(`_${currentPOG}.pdf`));
+    
+    if (!pdfFile) {
+        alert(`PDF not found for POG ${currentPOG}`);
+        console.log('Looking for PDF ending with:', `_${currentPOG}.pdf`);
+        console.log('Available PDFs:', fileIndex.filter(f => f.endsWith('.pdf')));
+        return;
+    }
+    
     const pdfFrame = document.getElementById('pdf-frame');
     const pdfModal = document.getElementById('pdf-modal');
     
     if (pdfFrame && pdfModal) {
-        pdfFrame.src = pdfName;
+        pdfFrame.src = pdfFile;
         pdfModal.classList.remove('hidden');
     } else {
         console.error('PDF elements not found');
