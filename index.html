@@ -9,7 +9,6 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐴</text></svg>">
 </head>
 <body>
-    <!-- Modal: Loading -->
     <div id="loading-overlay" class="modal-overlay">
         <div class="modal-card">
             <div class="spinner"></div>
@@ -18,7 +17,6 @@
         </div>
     </div>
 
-    <!-- Modal: Store Selection -->
     <div id="store-modal" class="modal-overlay hidden">
         <div class="modal-card">
             <h2>🐴 PEGASUS</h2>
@@ -29,14 +27,12 @@
         </div>
     </div>
 
-    <!-- Modal: Scanner -->
     <div id="scanner-modal" class="modal-overlay hidden" style="flex-direction: column;">
-        <button onclick="stopScanner()" class="btn-secondary" style="background:white; margin-bottom:10px;">CLOSE CAMERA X</button>
+        <button onclick="stopScanner()" class="btn-secondary" style="background:white; margin-bottom:10px;">CLOSE CAMERA ✕</button>
         <div id="reader"></div>
         <p style="color:white; margin-top:10px;">Point camera at barcode</p>
     </div>
 
-    <!-- Modal: PDF -->
     <div id="pdf-modal" class="modal-overlay hidden">
         <div class="modal-card pdf-card">
             <div class="modal-header">
@@ -47,15 +43,14 @@
         </div>
     </div>
 
-    <!-- Modal: Product Details -->
     <div id="product-modal" class="modal-overlay hidden" onclick="closeProductModal(event)">
         <div class="product-detail-card" onclick="event.stopPropagation()">
             <div class="product-detail-image">
                 <img id="detail-image" src="" alt="Product Image">
             </div>
             <div class="product-detail-info">
-                <div class="detail-row" style="text-align: center; margin-bottom: 15px;">
-                    <span id="detail-peg" class="detail-peg-display"></span>
+                <div class="detail-row" style="text-align: center; margin-bottom: 15px; justify-content:center;">
+                    <span id="detail-peg" class="detail-peg-display">--</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Position:</span>
@@ -86,7 +81,6 @@
         </div>
     </div>
 
-    <!-- Modal: Mini-Map -->
     <div id="minimap-modal" class="modal-overlay hidden" onclick="closeMinimap(event)">
         <div class="minimap-card" onclick="event.stopPropagation()">
             <div class="minimap-header">
@@ -102,7 +96,63 @@
         </div>
     </div>
 
-    <!-- FLOATING BUTTONS (shown when header collapsed) -->
+    <div id="bay-overlay" class="bay-overlay hidden">
+        <div class="bay-overlay-content">
+            <div class="bay-overlay-label">BAY</div>
+            <div id="bay-overlay-number" class="bay-overlay-number">1</div>
+        </div>
+    </div>
+
+    <div id="row-toast" class="row-toast hidden">
+        <span id="row-toast-text">⬇️ Moving to Row 5</span>
+    </div>
+
+    <div id="delete-overlay" class="delete-overlay hidden">
+        <div class="delete-overlay-content">
+            <div class="delete-overlay-label">DELETE</div>
+            <div id="delete-overlay-upc" class="delete-overlay-upc"></div>
+            <div id="delete-overlay-desc" class="delete-overlay-desc"></div>
+        </div>
+    </div>
+
+    <div id="found-overlay" class="found-overlay hidden">
+        <div class="found-overlay-content">
+            <div class="found-overlay-label">Item Found</div>
+            <div id="found-overlay-bay" class="found-overlay-bay"></div>
+            <div id="found-overlay-position" class="found-overlay-position"></div>
+            <div id="found-overlay-peg" class="found-overlay-peg"></div>
+        </div>
+    </div>
+
+    <div id="notfound-overlay" class="notfound-overlay hidden">
+        <div class="notfound-overlay-content">
+            <div class="notfound-overlay-label">Item Not Found!</div>
+        </div>
+    </div>
+
+    <div id="bay-complete-overlay" class="celebration-overlay hidden">
+        <div class="celebration-content">
+            <div class="celebration-emoji">🎉</div>
+            <div class="celebration-title">Bay Complete!</div>
+            <div id="bay-complete-text" class="celebration-subtitle">Great work!</div>
+        </div>
+    </div>
+
+    <div id="pog-complete-overlay" class="celebration-overlay pog-celebration hidden">
+        <div class="celebration-content">
+            <div class="celebration-emoji">🏆</div>
+            <div class="celebration-title">SET COMPLETE!</div>
+            <div id="pog-complete-text" class="celebration-subtitle">Amazing job! All items done!</div>
+        </div>
+        <canvas id="confetti-canvas"></canvas>
+    </div>
+
+    <div id="multi-match-bar" class="multi-match-bar hidden">
+        <button id="btn-prev-match" class="btn-match-nav" onclick="showPrevMatch()">◀ PREV</button>
+        <span id="match-indicator" class="match-indicator">1 of 3</span>
+        <button id="btn-next-match" class="btn-match-nav" onclick="showNextMatch()">NEXT ▶</button>
+    </div>
+
     <div id="floating-btns" class="floating-btns hidden">
         <button id="btn-float-scan" class="float-btn" onclick="startScanner()" title="Scan Barcode">
             <span class="float-icon">🔍</span>
@@ -118,72 +168,6 @@
         </button>
     </div>
 
-    <!-- Bay Change Overlay -->
-    <div id="bay-overlay" class="bay-overlay hidden">
-        <div class="bay-overlay-content">
-            <div class="bay-overlay-label">BAY</div>
-            <div id="bay-overlay-number" class="bay-overlay-number">1</div>
-        </div>
-    </div>
-
-    <!-- Row Change Toast -->
-    <div id="row-toast" class="row-toast hidden">
-        <span id="row-toast-text">⬇️ Moving to Row 5</span>
-    </div>
-
-    <!-- Delete Item Overlay -->
-    <div id="delete-overlay" class="delete-overlay hidden">
-        <div class="delete-overlay-content">
-            <div class="delete-overlay-label">DELETE</div>
-            <div id="delete-overlay-upc" class="delete-overlay-upc"></div>
-            <div id="delete-overlay-desc" class="delete-overlay-desc"></div>
-        </div>
-    </div>
-
-    <!-- Item Found Overlay -->
-    <div id="found-overlay" class="found-overlay hidden">
-        <div class="found-overlay-content">
-            <div class="found-overlay-label">Item Found</div>
-            <div id="found-overlay-bay" class="found-overlay-bay"></div>
-            <div id="found-overlay-position" class="found-overlay-position"></div>
-            <div id="found-overlay-peg" class="found-overlay-peg"></div>
-        </div>
-    </div>
-
-    <!-- Item Not Found Overlay -->
-    <div id="notfound-overlay" class="notfound-overlay hidden">
-        <div class="notfound-overlay-content">
-            <div class="notfound-overlay-label">Item Not Found!</div>
-        </div>
-    </div>
-
-    <!-- Bay Complete Celebration -->
-    <div id="bay-complete-overlay" class="celebration-overlay hidden">
-        <div class="celebration-content">
-            <div class="celebration-emoji">🎉</div>
-            <div class="celebration-title">Bay Complete!</div>
-            <div id="bay-complete-text" class="celebration-subtitle">Great work!</div>
-        </div>
-    </div>
-
-    <!-- POG Complete Celebration -->
-    <div id="pog-complete-overlay" class="celebration-overlay pog-celebration hidden">
-        <div class="celebration-content">
-            <div class="celebration-emoji">🏆</div>
-            <div class="celebration-title">SET COMPLETE!</div>
-            <div id="pog-complete-text" class="celebration-subtitle">Amazing job! All items done!</div>
-        </div>
-        <canvas id="confetti-canvas"></canvas>
-    </div>
-
-    <!-- Multiple Matches Navigation Bar -->
-    <div id="multi-match-bar" class="multi-match-bar hidden">
-        <button id="btn-prev-match" class="btn-match-nav" onclick="showPrevMatch()">◀ PREV</button>
-        <span id="match-indicator" class="match-indicator">1 of 3</span>
-        <button id="btn-next-match" class="btn-match-nav" onclick="showNextMatch()">NEXT ▶</button>
-    </div>
-
-    <!-- MAIN HEADER (collapsible) -->
     <header id="main-header">
         <div class="header-top">
             <div class="store-info">
@@ -199,33 +183,27 @@
             </div>
         </div>
 
-        <!-- Search & Scan Controls -->
         <div class="tools-container">
             <button id="btn-scan-toggle" class="btn-scan-large">📷 SCAN BARCODE</button>
-            
             <div class="manual-search-row">
                 <input type="text" id="search-input" placeholder="Manual UPC Entry...">
                 <button id="btn-manual-search" class="btn-go">Search</button>
             </div>
-            
             <div id="scan-debug">Last Scanned: <span id="scan-result">--</span></div>
         </div>
 
-        <!-- Navigation -->
         <div class="nav-row">
             <button class="nav-arrow" onclick="changeBay(-1)">❮</button>
             <div id="bay-indicator">Bay 1</div>
             <button class="nav-arrow" onclick="changeBay(1)">❯</button>
         </div>
 
-        <!-- Progress -->
         <div class="progress-bar-bg">
             <div id="progress-fill" class="progress-fill"></div>
         </div>
         <div class="progress-text"><span id="progress-count">0/0</span> Complete</div>
     </header>
 
-    <!-- PEGBOARD CANVAS -->
     <main id="main-canvas">
         <div id="grid-container"></div>
     </main>
