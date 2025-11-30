@@ -105,6 +105,251 @@ h1 { font-size: 1.1rem; color: var(--primary); margin: 0; }
     }
 }
 
+/* Delete Item Overlay */
+.delete-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 500;
+    animation: delete-overlay-fade 4s ease-out forwards;
+}
+
+.delete-overlay.hidden {
+    display: none;
+}
+
+.delete-overlay-content {
+    text-align: center;
+    animation: delete-flash 0.3s ease-in-out 4;
+    padding: 20px;
+}
+
+.delete-overlay-label {
+    color: #ff0000;
+    font-size: 5rem;
+    font-weight: bold;
+    text-shadow: 0 0 30px #ff0000, 0 0 60px #ff0000, 0 0 90px #ff0000;
+    letter-spacing: 8px;
+    line-height: 1;
+    margin-bottom: 20px;
+}
+
+.delete-overlay-upc {
+    color: #ffffff;
+    font-size: 1.8rem;
+    font-weight: bold;
+    font-family: monospace;
+    margin-bottom: 10px;
+}
+
+.delete-overlay-desc {
+    color: #ffcccc;
+    font-size: 1.2rem;
+    font-weight: normal;
+    max-width: 90vw;
+    word-wrap: break-word;
+}
+
+@keyframes delete-overlay-fade {
+    0%, 85% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@keyframes delete-flash {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.6;
+        transform: scale(1.08);
+    }
+}
+
+/* Item Found Overlay */
+.found-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 500;
+    animation: found-overlay-fade 3s ease-out forwards;
+}
+
+.found-overlay.hidden {
+    display: none;
+}
+
+.found-overlay-content {
+    text-align: center;
+    animation: found-flash 0.4s ease-in-out 3;
+    padding: 20px;
+}
+
+.found-overlay-label {
+    color: #00ff00;
+    font-size: 3.5rem;
+    font-weight: bold;
+    text-shadow: 0 0 30px #00ff00, 0 0 60px #00ff00, 0 0 90px #00ff00;
+    letter-spacing: 4px;
+    line-height: 1;
+    margin-bottom: 25px;
+}
+
+.found-overlay-bay {
+    color: #ffffff;
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+.found-overlay-position {
+    color: #88ff88;
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.found-overlay-peg {
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.9);
+    color: #00ff00;
+    font-size: 2rem;
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-family: monospace;
+    text-shadow: 0 0 10px #00ff00;
+    border: 2px solid #00ff00;
+}
+
+@keyframes found-overlay-fade {
+    0%, 80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@keyframes found-flash {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.8;
+        transform: scale(1.03);
+    }
+}
+
+/* Item Not Found Overlay */
+.notfound-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 500;
+    animation: notfound-overlay-fade 3s ease-out forwards;
+}
+
+.notfound-overlay.hidden {
+    display: none;
+}
+
+.notfound-overlay-content {
+    text-align: center;
+    animation: notfound-flash 0.3s ease-in-out 4;
+    padding: 20px;
+}
+
+.notfound-overlay-label {
+    color: #ff9800;
+    font-size: 3rem;
+    font-weight: bold;
+    text-shadow: 0 0 30px #ff9800, 0 0 60px #ff9800, 0 0 90px #ff9800;
+    letter-spacing: 4px;
+    line-height: 1;
+}
+
+@keyframes notfound-overlay-fade {
+    0%, 75% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@keyframes notfound-flash {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.6;
+        transform: scale(1.05);
+    }
+}
+
+/* Multiple Matches Navigation Bar */
+.multi-match-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.85));
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    padding: 12px 20px;
+    z-index: 200;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+}
+
+.multi-match-bar.hidden {
+    display: none;
+}
+
+.btn-match-nav {
+    padding: 12px 24px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    min-width: 100px;
+}
+
+.btn-match-nav:active {
+    background: #004a9e;
+}
+
+.btn-match-nav:disabled {
+    background: #555;
+    color: #999;
+    cursor: not-allowed;
+}
+
+.match-indicator {
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: bold;
+    min-width: 80px;
+    text-align: center;
+}
+
 .tools-container { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .btn-scan-large { 
     background: var(--primary); color: white; border: none; 
