@@ -1,31 +1,87 @@
-// --- CONFIGURATION ---
+// === PEGASUS - Planogram Execution Guide And Store User Support ===
+// === CONFIGURATION ===
 const REPO_BASE = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
 
 // Board Physics (1 unit = 1 inch)
 const BOARD_WIDTH_INCHES = 46;  // Col 1 to 46
 const BOARD_HEIGHT_INCHES = 64; // Row 1 to 64
 
-// --- GLOBAL VARIABLES ---
+// === GLOBAL VARIABLES ===
 let PPI = 0; // Pixels Per Inch (Calculated dynamically)
-let fileIndex = [];
+let fileIndex = [];  // Array of filename STRINGS
 let pogData = [];
 let storeMap = [];
+let deleteData = []; // Items to be deleted
 let currentStore = null;
 let currentPOG = null;
 let currentBay = 1;
 let allBays = [];
 let html5QrCode = null;
 let completedItems = new Set(JSON.parse(localStorage.getItem('harpa_complete') || "[]"));
-let headerCollapsed = false;
+let headerCollapsed = true; // START COLLAPSED (new feature)
 let currentItemBox = null; // Currently selected item for the modal
+let largeFontMode = localStorage.getItem('pegasus_largefont') === 'true';
 
-// --- INIT ---
+// Multi-match navigation state
+let currentMatches = [];
+let currentMatchIndex = 0;
+
+// Audio context for feedback sounds
+let audioContext = null;
+
+// Track bay completion for celebrations
+let bayCompletionShown = new Set();
+let pogCompleteShown = false;
+
+// === AUDIO FEEDBACK SYSTEM ===
+function initAudio() {
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+        console.log("Audio not supported");
+    }
+}
+
+function playTone(frequency, duration, type = 'sine', volume = 0.3) {
+    if (!audioContext) return;
+    try {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.frequency.value = frequency;
+        oscillator.type = type;
+        gainNode.gain.value = volume;
+        oscillator.start();
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+        oscillator.stop(audioContext.currentTime + duration);
+    } catch (e) { }
+}
+
+function playFoundSound() {
+    playTone(523, 0.15); setTimeout(() => playTone(659, 0.15), 100); setTimeout(() => playTone(784, 0.2), 200);
+}
+function playNotFoundSound() { playTone(300, 0.3, 'square', 0.2); }
+function playDeleteSound() {
+    playTone(600, 0.15); setTimeout(() => playTone(400, 0.15), 100); setTimeout(() => playTone(250, 0.25), 200);
+}
+function playCompleteSound() { playTone(800, 0.08); setTimeout(() => playTone(1200, 0.1), 50); }
+function playRowChangeSound() { playTone(600, 0.1, 'sine', 0.15); }
+function playCelebrationSound() {
+    playTone(523, 0.15); setTimeout(() => playTone(659, 0.15), 100);
+    setTimeout(() => playTone(784, 0.15), 200); setTimeout(() => playTone(1047, 0.3), 300);
+}
+function playPogCompleteSound() {
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((freq, i) => setTimeout(() => playTone(freq, 0.2), i * 120));
+}
+
+// === INIT ===
 document.addEventListener('DOMContentLoaded', () => {
     init();
     setupSwipe();
-    window.addEventListener('resize', () => {
-        if (currentPOG && currentBay) renderGrid(currentBay);
-    });
+    document.addEventListener('click', () => { if (!audioContext) initAudio(); }, { once: true });
+    window.addEventListener('resize', () => { if (currentPOG && currentBay) renderGrid(currentBay); });
+    if (largeFontMode) document.body.classList.add('large-font-mode');
 });
 
 async function init() {
@@ -45,7 +101,6 @@ async function init() {
             <div class="modal-card">
                 <h3>⚠️ Data Load Error</h3>
                 <p style="color:#666; margin:10px 0;">${e.message}</p>
-                <p style="font-size:0.8rem;">Check that CSV files exist in the repo.</p>
             </div>
         `;
     }
@@ -60,43 +115,67 @@ async function init() {
     
     document.getElementById('btn-scan-toggle').onclick = startScanner;
     
-    document.getElementById('btn-manual-search').onclick = () => 
-        handleSearchOrScan(document.getElementById('search-input').value.trim(), false);
+    document.getElementById('btn-manual-search').onclick = () => {
+        const input = document.getElementById('search-input');
+        handleSearchOrScan(input.value.trim(), false);
+        input.value = '';
+    };
     
     document.getElementById('search-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearchOrScan(document.getElementById('search-input').value.trim(), false);
+        if (e.key === 'Enter') {
+            const input = document.getElementById('search-input');
+            handleSearchOrScan(input.value.trim(), false);
+            input.value = '';
+        }
     });
 }
 
-// --- HEADER COLLAPSE/EXPAND ---
+// === HEADER COLLAPSE/EXPAND ===
 function toggleHeader() {
     const header = document.getElementById('main-header');
-    const expandBtn = document.getElementById('btn-expand');
-    
+    const floatingBtns = document.getElementById('floating-btns');
     headerCollapsed = !headerCollapsed;
     
     if (headerCollapsed) {
         header.classList.add('collapsed');
-        expandBtn.classList.remove('hidden');
+        floatingBtns.classList.remove('hidden');
     } else {
         header.classList.remove('collapsed');
-        expandBtn.classList.add('hidden');
+        floatingBtns.classList.add('hidden');
     }
-    
-    // Re-render grid after transition to use new available space
-    setTimeout(() => {
-        if (currentPOG && currentBay) renderGrid(currentBay);
-    }, 350);
+    setTimeout(() => { if (currentPOG && currentBay) renderGrid(currentBay); }, 350);
 }
 
-// --- DATA LOADING ---
+// === FONT SIZE TOGGLE ===
+function toggleFontSize() {
+    largeFontMode = !largeFontMode;
+    localStorage.setItem('pegasus_largefont', largeFontMode);
+    if (largeFontMode) {
+        document.body.classList.add('large-font-mode');
+        showToast('Large text mode ON - some labels may overlap', 2000);
+    } else {
+        document.body.classList.remove('large-font-mode');
+        showToast('Large text mode OFF', 1500);
+    }
+    if (currentPOG && currentBay) setTimeout(() => renderGrid(currentBay), 100);
+}
+
+function showToast(message, duration = 2000) {
+    const toast = document.getElementById('row-toast');
+    document.getElementById('row-toast-text').innerText = message;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), duration);
+}
+
+// === DATA LOADING ===
 async function loadCSVData() {
     const ts = Date.now();
     
-    const [filesResp, pogsResp, mapsResp] = await Promise.all([
+    const [filesResp, pogsResp, mapsResp, deletesResp] = await Promise.all([
         fetch(`githubfiles.csv?t=${ts}`),
         fetch(`allplanogramdata.csv?t=${ts}`),
-        fetch(`Store_POG_Mapping.csv?t=${ts}`)
+        fetch(`Store_POG_Mapping.csv?t=${ts}`),
+        fetch(`Deletes.csv?t=${ts}`).catch(() => null)
     ]);
     
     if (!filesResp.ok) throw new Error("githubfiles.csv not found");
@@ -109,24 +188,23 @@ async function loadCSVData() {
         mapsResp.text()
     ]);
 
+    // fileIndex is an array of filename STRINGS
     fileIndex = files.split('\n').map(l => l.trim()).filter(l => l);
     pogData = parseCSV(pogs).map(i => ({...i, CleanUPC: normalizeUPC(i.UPC)}));
     storeMap = parseCSV(maps);
     
-    console.log(`Loaded: ${fileIndex.length} files, ${pogData.length} products, ${storeMap.length} store mappings`);
-    
-    // Debug: Show first few records and their structure
-    if (pogData.length > 0) {
-        console.log("CSV Columns found:", Object.keys(pogData[0]));
-        console.log("Sample record:", pogData[0]);
-        console.log("Sample UPC:", pogData[0].UPC, "-> CleanUPC:", pogData[0].CleanUPC);
+    // Load deletes data if file exists
+    if (deletesResp && deletesResp.ok) {
+        const deletesText = await deletesResp.text();
+        deleteData = parseCSV(deletesText).map(i => ({...i, CleanUPC: normalizeUPC(i.UPC)}));
+        console.log(`Loaded: ${deleteData.length} delete items`);
     }
+    
+    console.log(`Loaded: ${fileIndex.length} files, ${pogData.length} products, ${storeMap.length} store mappings`);
 }
 
 function parseCSV(text) {
-    // Normalize line endings (handle Windows \r\n)
     text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length === 0) return [];
     
@@ -136,7 +214,6 @@ function parseCSV(text) {
     for (let i = 1; i < lines.length; i++) {
         const row = parseCSVLine(lines[i]);
         if (row.length < headers.length) continue;
-        
         let obj = {};
         headers.forEach((h, j) => obj[h] = row[j] || "");
         res.push(obj);
@@ -144,7 +221,6 @@ function parseCSV(text) {
     return res;
 }
 
-// Handle quoted CSV fields properly and strip any remaining \r
 function parseCSVLine(line) {
     const result = [];
     let current = '';
@@ -152,7 +228,6 @@ function parseCSVLine(line) {
     
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        
         if (char === '"') {
             inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
@@ -166,7 +241,24 @@ function parseCSVLine(line) {
     return result;
 }
 
-// --- STORE LOGIC ---
+function normalizeUPC(upc) {
+    if (!upc) return "";
+    let cleaned = upc.toString().trim().replace(/\r/g, '');
+    cleaned = cleaned
+        .replace(/[OoQq]/g, '0')
+        .replace(/[IilL|]/g, '1')
+        .replace(/[Ss\$]/g, '5')
+        .replace(/[Bb]/g, '8')
+        .replace(/[Zz]/g, '2')
+        .replace(/[Gg]/g, '6')
+        .replace(/[Tt]/g, '7');
+    cleaned = cleaned.replace(/[^0-9]/g, '');
+    cleaned = cleaned.replace(/^0+/, '');
+    if (cleaned === '') cleaned = '0';
+    return cleaned;
+}
+
+// === STORE LOGIC ===
 function loadStoreLogic(storeNum) {
     if (!storeNum) return;
     
@@ -177,139 +269,99 @@ function loadStoreLogic(storeNum) {
         return;
     }
     
-    // Check if this is a different store than before - if so, clear progress
-    const previousStore = localStorage.getItem('harpa_store');
-    if (previousStore && previousStore !== storeNum) {
-        completedItems.clear();
-        localStorage.removeItem('harpa_complete');
-    }
-    
     currentStore = storeNum;
     currentPOG = map.POG;
     localStorage.setItem('harpa_store', storeNum);
 
-    // Update UI
     document.getElementById('store-modal').classList.add('hidden');
     document.getElementById('store-display').innerText = `Store: ${storeNum}`;
     document.getElementById('pog-display').innerText = `POG: ${currentPOG}`;
 
-    // Find Bays
     const items = pogData.filter(i => i.POG === currentPOG);
-    allBays = [...new Set(items.map(i => parseInt(i.Bay)))].filter(b => !isNaN(b)).sort((a, b) => a - b);
+    const baySet = new Set(items.map(i => parseInt(i.Bay)).filter(b => !isNaN(b)));
+    allBays = [...baySet].sort((a, b) => a - b);
     
     if (allBays.length > 0) {
-        loadBay(allBays[0]);
-    } else {
-        document.getElementById('grid-container').innerHTML = '<div class="empty-state">No items found for this Planogram.</div>';
+        currentBay = allBays[0];
+        renderGrid(currentBay);
+        
+        // Start with header collapsed
+        const header = document.getElementById('main-header');
+        const floatingBtns = document.getElementById('floating-btns');
+        headerCollapsed = true;
+        header.classList.add('collapsed');
+        floatingBtns.classList.remove('hidden');
     }
 }
 
 function resetStore() {
-    // Clear completed items when changing stores
-    completedItems.clear();
-    localStorage.removeItem('harpa_complete');
     localStorage.removeItem('harpa_store');
     location.reload();
 }
 
 function startOver() {
-    // Show confirmation
-    if (!confirm('Are you sure you want to reset all items to unset? This will clear all progress for this store.')) {
-        return;
-    }
-    
-    // Clear all completed items
+    if (!confirm('Reset all items to unset?')) return;
     completedItems.clear();
     localStorage.removeItem('harpa_complete');
-    
-    // Re-render current bay to update visual state
-    renderGrid(currentBay);
+    bayCompletionShown.clear();
+    pogCompleteShown = false;
+    if (currentPOG && currentBay) renderGrid(currentBay);
+    showToast('Progress reset!', 1500);
 }
 
-// --- BAY LOGIC ---
-function changeBay(dir) {
-    const idx = allBays.indexOf(currentBay);
-    if (idx === -1) return;
-    
-    let newIdx = idx + dir;
-    newIdx = Math.max(0, Math.min(newIdx, allBays.length - 1));
-    
-    if (allBays[newIdx] !== currentBay) {
-        loadBay(allBays[newIdx], true); // true = show overlay
-    }
+// === GRID RENDERING ===
+function getCoords(peg) {
+    if (!peg) return { r: 1, c: 1 };
+    const match = peg.match(/R(\d+)\s*C(\d+)/i);
+    return match ? { r: parseInt(match[1]), c: parseInt(match[2]) } : { r: 1, c: 1 };
 }
 
-function loadBay(bayNum, showOverlay = false) {
-    currentBay = bayNum;
-    const bayIndex = allBays.indexOf(bayNum) + 1;
-    document.getElementById('bay-indicator').innerText = `Bay ${bayIndex} of ${allBays.length}`;
-    renderGrid(bayNum);
-    
-    // Show bay change overlay if navigating between bays
-    if (showOverlay) {
-        showBayOverlay(bayIndex);
-    }
-}
-
-function showBayOverlay(bayIndex) {
-    const overlay = document.getElementById('bay-overlay');
-    const bayNumber = document.getElementById('bay-overlay-number');
-    
-    bayNumber.innerText = bayIndex;
-    overlay.classList.remove('hidden');
-    
-    // Remove after animation
-    setTimeout(() => {
-        overlay.classList.add('hidden');
-    }, 1200);
-}
-
-// --- PHYSICS & RENDERING ---
 function renderGrid(bayNum) {
+    currentBay = bayNum;
     const container = document.getElementById('grid-container');
     const canvas = document.getElementById('main-canvas');
     container.innerHTML = '';
 
-    // Get available space
-    const availableWidth = canvas.clientWidth - 10;  // Small margin
+    const availableWidth = canvas.clientWidth - 10;
     const availableHeight = canvas.clientHeight - 10;
 
-    // Calculate PPI to FIT ENTIRE BOARD on screen
-    // Use whichever dimension is more constraining
-    const ppiByWidth = availableWidth / BOARD_WIDTH_INCHES;
-    const ppiByHeight = availableHeight / BOARD_HEIGHT_INCHES;
-    PPI = Math.min(ppiByWidth, ppiByHeight);
+    const ppiW = availableWidth / BOARD_WIDTH_INCHES;
+    const ppiH = availableHeight / BOARD_HEIGHT_INCHES;
+    PPI = Math.min(ppiW, ppiH);
 
-    // Set Board Dimensions
     const pxWidth = BOARD_WIDTH_INCHES * PPI;
     const pxHeight = BOARD_HEIGHT_INCHES * PPI;
 
     container.style.width = `${pxWidth}px`;
     container.style.height = `${pxHeight}px`;
-    
-    // Visual Grid Dots: 1 inch spacing = PPI
     container.style.backgroundSize = `${PPI}px ${PPI}px`;
     container.style.backgroundImage = `radial-gradient(#333 15%, transparent 16%)`;
 
-    // Place Items
+    document.getElementById('bay-indicator').innerText = `Bay ${bayNum}`;
+
     const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === bayNum);
     let doneCount = 0;
 
+    // Build UPC count for repeated UPC detection
+    const upcCounts = {};
+    const upcPositions = {};
+    items.forEach(item => {
+        const upc = item.CleanUPC;
+        if (!upcCounts[upc]) { upcCounts[upc] = 0; upcPositions[upc] = []; }
+        upcCounts[upc]++;
+        upcPositions[upc].push(parseInt(item.Position) || 0);
+    });
+
     items.forEach(item => {
         const { r, c } = getCoords(item.Peg);
-        
-        // Parse Dimensions (remove " in" suffix)
         const h = parseFloat((item.Height || "6").replace(/\s*in/i, '')) || 6;
         const w = parseFloat((item.Width || "3").replace(/\s*in/i, '')) || 3;
 
         // --- FROG LOGIC ---
-        // Hole (c, r) is the Left Leg.
-        // Hole Center X = (c - 1) * PPI + (PPI/2)
-        // Hole Center Y = (r - 1) * PPI + (PPI/2)
         const holeLeftX = ((c - 1) * PPI) + (PPI / 2);
         const holeY = ((r - 1) * PPI) + (PPI / 2);
 
-        // Visual Red Dot (Frog Left Leg)
+        // Frog Red Dot
         const dot = document.createElement('div');
         dot.className = 'frog-dot';
         dot.style.left = `${holeLeftX}px`;
@@ -325,13 +377,8 @@ function renderGrid(bayNum) {
         pegLabel.style.transform = 'translateX(-50%)';
         container.appendChild(pegLabel);
 
-        // Frog spans C and C+1. Center is +0.5 inch from Left Leg.
         const frogCenterX = holeLeftX + (PPI / 2);
-        
-        // Product is centered horizontally on Frog Center
         const boxLeft = frogCenterX - ((w * PPI) / 2);
-        
-        // Product hangs DOWN from the hole row
         const boxTop = holeY + (PPI * 0.5);
 
         // Render Box
@@ -342,8 +389,6 @@ function renderGrid(bayNum) {
         box.style.left = `${boxLeft}px`;
         box.style.top = `${boxTop}px`;
         box.dataset.upc = item.CleanUPC;
-        
-        // Store full item data for detail modal
         box.dataset.itemData = JSON.stringify(item);
 
         if (completedItems.has(item.CleanUPC)) {
@@ -351,17 +396,26 @@ function renderGrid(bayNum) {
             doneCount++;
         }
 
-        // Find image in file index that starts with UPC (handle both raw UPC and cleaned UPC)
+        // Check for repeated UPC
+        const upcCount = upcCounts[item.CleanUPC] || 1;
+        if (upcCount > 1) {
+            box.classList.add('repeated-upc');
+            const positions = upcPositions[item.CleanUPC].sort((a, b) => a - b);
+            const facingIndex = positions.indexOf(parseInt(item.Position) || 0) + 1;
+            const facingBadge = document.createElement('div');
+            facingBadge.className = 'facing-badge';
+            facingBadge.innerText = `${facingIndex}/${upcCount}`;
+            box.appendChild(facingBadge);
+            box.dataset.facingInfo = `${facingIndex} of ${upcCount}`;
+        }
+
+        // Find image - fileIndex is array of filename STRINGS
         let imgFile = fileIndex.find(f => f.startsWith(item.UPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
-        
-        // Also try with CleanUPC (no leading zeros) in case filename doesn't have them
         if (!imgFile && item.CleanUPC !== item.UPC) {
             imgFile = fileIndex.find(f => f.startsWith(item.CleanUPC) && /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
         }
         
         box.dataset.imgSrc = imgFile || '';
-        
-        // Extract description from filename if image exists
         const filenameDesc = extractDescriptionFromFilename(imgFile);
         box.dataset.filenameDesc = filenameDesc || '';
         
@@ -371,7 +425,6 @@ function renderGrid(bayNum) {
             img.alt = item.UPC;
             img.onerror = () => {
                 box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
-                // Re-add position label after innerHTML replacement
                 addPositionLabel(box, item.Position);
             };
             box.appendChild(img);
@@ -379,30 +432,22 @@ function renderGrid(bayNum) {
             box.innerHTML = `<span style="font-size:${Math.max(6, PPI * 0.8)}px; text-align:center; padding:2px; word-break:break-all;">${item.UPC}</span>`;
         }
 
-        // Add Position Number Label
         addPositionLabel(box, item.Position);
-
-        // Open detail modal on click
         box.onclick = () => openProductModal(box);
         container.appendChild(box);
     });
 
-    // Update Progress
     updateProgress(items, doneCount);
+    checkBayCompletion(items, doneCount);
 }
 
-// Helper function to extract description from image filename
 function extractDescriptionFromFilename(filename) {
     if (!filename) return null;
-    // Remove file extension
     const noExt = filename.replace(/\.(jpg|jpeg|png|gif|webp)$/i, '');
-    // Remove UPC (leading digits) and separator (space or underscore)
     const desc = noExt.replace(/^\d+[\s_]?/, '');
-    // Replace underscores with spaces and clean up
     return desc.replace(/_/g, ' ').trim() || null;
 }
 
-// Helper function to add position label
 function addPositionLabel(box, position) {
     if (!position) return;
     const posLabel = document.createElement('div');
@@ -418,75 +463,93 @@ function updateProgress(items, doneCount) {
     document.getElementById('progress-count').innerText = `${doneCount}/${total}`;
 }
 
-// Helper: Convert "R02 C03" to integers
-function getCoords(pegStr) {
-    if (!pegStr) return { r: 1, c: 1 };
-    const m = pegStr.match(/R(\d+)\s*C(\d+)/i);
-    if (m) return { r: parseInt(m[1]), c: parseInt(m[2]) };
-    return { r: 1, c: 1 };
-}
-
-// --- UPC LOGIC ---
-function normalizeUPC(upc) {
-    if (!upc) return "";
-    
-    // Convert to string, trim whitespace, remove any \r characters
-    let cleaned = upc.toString().trim().replace(/\r/g, '');
-    
-    // Remove any non-numeric characters (some scanners add extra chars)
-    cleaned = cleaned.replace(/[^0-9]/g, '');
-    
-    // Strip ALL leading zeros
-    cleaned = cleaned.replace(/^0+/, '');
-    
-    // If the entire UPC was zeros, keep at least one digit
-    if (cleaned === '') cleaned = '0';
-    
-    return cleaned;
-}
-
-function toggleComplete(upc, el) {
-    if (completedItems.has(upc)) {
-        completedItems.delete(upc);
-        el.classList.remove('completed');
-    } else {
-        completedItems.add(upc);
-        el.classList.add('completed');
+// === BAY NAVIGATION ===
+function changeBay(dir) {
+    const idx = allBays.indexOf(currentBay);
+    if (idx === -1) return;
+    let newIdx = idx + dir;
+    newIdx = Math.max(0, Math.min(newIdx, allBays.length - 1));
+    if (allBays[newIdx] !== currentBay) {
+        currentBay = allBays[newIdx];
+        showBayOverlay(currentBay);
+        renderGrid(currentBay);
     }
-    localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
-    
-    // Update progress
-    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
-    const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
-    updateProgress(items, done);
 }
 
-// --- SCANNER & SEARCH ---
-let isProcessingScan = false; // Prevent multiple rapid scans
+function loadBay(bayNum, showOverlay = false) {
+    if (!allBays.includes(bayNum)) return;
+    currentBay = bayNum;
+    if (showOverlay) showBayOverlay(currentBay);
+    renderGrid(currentBay);
+}
+
+function showBayOverlay(bayNum) {
+    const overlay = document.getElementById('bay-overlay');
+    document.getElementById('bay-overlay-number').innerText = bayNum;
+    overlay.classList.remove('hidden');
+    if (navigator.vibrate) navigator.vibrate(50);
+    setTimeout(() => overlay.classList.add('hidden'), 1200);
+}
+
+// === SWIPE NAVIGATION ===
+function setupSwipe() {
+    const main = document.getElementById('main-canvas');
+    let touchStartX = 0;
+    let swipeDirection = null;
+    let holdTimer = null;
+    
+    main.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        swipeDirection = null;
+        if (holdTimer) clearTimeout(holdTimer);
+    }, { passive: true });
+    
+    main.addEventListener('touchmove', (e) => {
+        const deltaX = e.touches[0].clientX - touchStartX;
+        if (Math.abs(deltaX) > 60) {
+            const newDirection = deltaX > 0 ? 'right' : 'left';
+            if (newDirection !== swipeDirection) {
+                swipeDirection = newDirection;
+                if (holdTimer) clearTimeout(holdTimer);
+                holdTimer = setTimeout(() => {
+                    if (swipeDirection === 'left') changeBay(1);
+                    else if (swipeDirection === 'right') changeBay(-1);
+                    swipeDirection = null;
+                }, 400);
+            }
+        }
+    }, { passive: true });
+    
+    main.addEventListener('touchend', () => { if (holdTimer) clearTimeout(holdTimer); swipeDirection = null; });
+    main.addEventListener('touchcancel', () => { if (holdTimer) clearTimeout(holdTimer); swipeDirection = null; });
+}
+
+// === BARCODE SCANNER ===
+let isProcessingScan = false;
 
 function startScanner() {
+    if (html5QrCode) return;
+    
     const modal = document.getElementById('scanner-modal');
     modal.classList.remove('hidden');
     isProcessingScan = false;
+    if (!audioContext) initAudio();
     
     html5QrCode = new Html5Qrcode("reader");
+    
+    const scanConfig = { fps: 10, qrbox: { width: 280, height: 150 } };
+    
     html5QrCode.start(
         { facingMode: "environment" }, 
-        { fps: 10, qrbox: 250 },
+        scanConfig,
         (decodedText) => {
-            // Prevent multiple scans while processing
             if (isProcessingScan) return;
             isProcessingScan = true;
-            
-            // IMMEDIATELY close the scanner first
+            console.log(`📷 RAW SCAN: "${decodedText}"`);
             stopScanner();
-            
-            // Then process the scan after a brief delay to let camera close
-            setTimeout(() => {
-                handleSearchOrScan(decodedText, true);
-            }, 100);
+            setTimeout(() => handleSearchOrScan(decodedText, true), 100);
         },
-        (err) => { /* Ignore scan errors */ }
+        (err) => { }
     ).catch(e => {
         alert("Camera Error: " + e);
         stopScanner();
@@ -495,7 +558,7 @@ function startScanner() {
 
 function stopScanner() {
     const modal = document.getElementById('scanner-modal');
-    modal.classList.add('hidden'); // Hide immediately
+    modal.classList.add('hidden');
     
     if (html5QrCode) {
         html5QrCode.stop().then(() => {
@@ -511,120 +574,192 @@ function stopScanner() {
     }
 }
 
+// === SEARCH / SCAN HANDLING ===
 function handleSearchOrScan(input, fromScanner = false) {
     if (!input) return false;
+    hideMultiMatchBar();
     
     const clean = normalizeUPC(input);
-    // Also prepare version without check digit (last digit of UPC-A is check digit)
     const cleanNoCheckDigit = clean.length > 1 ? clean.slice(0, -1) : clean;
     
-    // Display for debugging - show the version without check digit since that's what we're matching
     document.getElementById('scan-result').innerText = `Searching: ${cleanNoCheckDigit}`;
-    console.log(`=== SEARCH DEBUG ===`);
-    console.log(`Raw input: "${input}"`);
-    console.log(`Cleaned (no leading zeros): "${clean}"`);
-    console.log(`Without check digit: "${cleanNoCheckDigit}"`);
-    console.log(`Current POG: "${currentPOG}"`);
 
-    // First check if we have items for this POG
+    // Check for DELETE item first
+    const deleteMatch = checkForDelete(clean, cleanNoCheckDigit);
+    if (deleteMatch) {
+        playDeleteSound();
+        showDeleteOverlay(deleteMatch.UPC || cleanNoCheckDigit, deleteMatch.Product || 'Unknown Item');
+        document.getElementById('scan-result').innerText = `🗑️ DELETE: ${deleteMatch.Product || cleanNoCheckDigit}`;
+        return true;
+    }
+
     const itemsInPOG = pogData.filter(i => i.POG === currentPOG);
-    console.log(`Items in POG "${currentPOG}": ${itemsInPOG.length}`);
-    
     if (itemsInPOG.length === 0) {
-        const allPOGs = [...new Set(pogData.map(i => i.POG))];
-        console.log(`POG not found! Available POGs:`, allPOGs.slice(0, 10));
-        document.getElementById('scan-result').innerText = `POG "${currentPOG}" has no items`;
+        playNotFoundSound();
+        showNotFoundOverlay();
         return false;
     }
 
-    // Try multiple matching strategies:
-    // 1. Exact match (rare - data usually doesn't have check digit)
-    // 2. Without trailing check digit (most common - scanner adds check digit, data doesn't have it)
-    // 3. Data has check digit but scan doesn't
+    let matches = findAllMatches(itemsInPOG, clean, cleanNoCheckDigit, fromScanner);
     
-    let match = itemsInPOG.find(i => i.CleanUPC === clean);
-    
-    if (!match) {
-        // Try without the check digit (most common case)
-        match = itemsInPOG.find(i => i.CleanUPC === cleanNoCheckDigit);
-        if (match) {
-            console.log(`Matched by removing check digit: "${clean}" → "${cleanNoCheckDigit}"`);
-        }
-    }
-    
-    if (!match) {
-        // Try matching where data has check digit but scan doesn't
-        match = itemsInPOG.find(i => i.CleanUPC.slice(0, -1) === clean);
-        if (match) {
-            console.log(`Matched by ignoring data's check digit`);
-        }
-    }
-    
-    if (!match) {
+    if (matches.length === 0) {
+        playNotFoundSound();
+        showNotFoundOverlay();
         document.getElementById('scan-result').innerText = `"${cleanNoCheckDigit}" not found`;
-        console.log(`UPC "${clean}" not found (also tried "${cleanNoCheckDigit}")`);
-        console.log(`Sample CleanUPCs:`, itemsInPOG.slice(0, 10).map(i => i.CleanUPC));
         return false;
     }
 
-    console.log(`✓ Found match:`, match);
-    document.getElementById('scan-result').innerText = `✓ Bay ${match.Bay}, ${match.Peg}`;
+    playFoundSound();
+    currentMatches = matches;
+    currentMatchIndex = 0;
+    showMatchAtIndex(0, true);
+    return true;
+}
 
-    // Use the matched item's CleanUPC for highlighting
-    const matchedUPC = match.CleanUPC;
-
-    // Collapse header to show full bay (zoom out effect)
-    if (!headerCollapsed) {
-        const header = document.getElementById('main-header');
-        const expandBtn = document.getElementById('btn-expand');
-        headerCollapsed = true;
-        header.classList.add('collapsed');
-        expandBtn.classList.remove('hidden');
+function findAllMatches(itemsInPOG, clean, cleanNoCheckDigit, fromScanner) {
+    let matches = [];
+    
+    if (!fromScanner && clean.length <= 4) {
+        matches = itemsInPOG.filter(i => i.CleanUPC.endsWith(clean) || i.CleanUPC.endsWith(cleanNoCheckDigit));
+    } else {
+        matches = itemsInPOG.filter(i => i.CleanUPC === clean);
+        if (matches.length === 0) matches = itemsInPOG.filter(i => i.CleanUPC === cleanNoCheckDigit);
+        if (matches.length === 0) matches = itemsInPOG.filter(i => i.CleanUPC.slice(0, -1) === clean);
     }
+    
+    matches.sort((a, b) => {
+        const bayDiff = parseInt(a.Bay) - parseInt(b.Bay);
+        if (bayDiff !== 0) return bayDiff;
+        return (parseInt(a.Position) || 0) - (parseInt(b.Position) || 0);
+    });
+    
+    return matches;
+}
 
-    // Check if we need to change bays
+function showMatchAtIndex(index, showOverlay = false) {
+    if (index < 0 || index >= currentMatches.length) return;
+    currentMatchIndex = index;
+    const match = currentMatches[index];
+    
+    let resultText = `✓ Bay ${match.Bay}, Pos ${match.Position}, ${match.Peg}`;
+    if (currentMatches.length > 1) resultText += ` (${index + 1} of ${currentMatches.length})`;
+    document.getElementById('scan-result').innerText = resultText;
+    
+    if (currentMatches.length > 1) showMultiMatchBar();
+    else hideMultiMatchBar();
+    
+    // Collapse header
+    if (!headerCollapsed) {
+        headerCollapsed = true;
+        document.getElementById('main-header').classList.add('collapsed');
+        document.getElementById('floating-btns').classList.remove('hidden');
+    }
+    
+    if (showOverlay) {
+        showFoundOverlay(match);
+        setTimeout(() => navigateToMatch(match), 2500);
+    } else {
+        navigateToMatch(match);
+    }
+}
+
+function navigateToMatch(match) {
     const itemBay = parseInt(match.Bay);
     if (itemBay !== currentBay) {
-        // Load the new bay and show overlay
-        loadBay(itemBay, true);
-        // Wait for bay to render, then highlight
-        setTimeout(() => highlightItem(matchedUPC), 600);
+        loadBay(itemBay, false);
+        setTimeout(() => highlightItem(match.CleanUPC), 300);
     } else {
-        // Re-render current bay to ensure full view
         renderGrid(currentBay);
-        setTimeout(() => highlightItem(matchedUPC), 100);
+        setTimeout(() => highlightItem(match.CleanUPC), 100);
     }
-    
-    return true; // Found
+}
+
+function showNextMatch() {
+    if (currentMatches.length === 0) return;
+    showMatchAtIndex((currentMatchIndex + 1) % currentMatches.length, false);
+}
+
+function showPrevMatch() {
+    if (currentMatches.length === 0) return;
+    showMatchAtIndex((currentMatchIndex - 1 + currentMatches.length) % currentMatches.length, false);
+}
+
+function showMultiMatchBar() {
+    document.getElementById('match-indicator').innerText = `${currentMatchIndex + 1} of ${currentMatches.length}`;
+    document.getElementById('multi-match-bar').classList.remove('hidden');
+}
+
+function hideMultiMatchBar() {
+    document.getElementById('multi-match-bar').classList.add('hidden');
+    currentMatches = [];
+    currentMatchIndex = 0;
+}
+
+function showFoundOverlay(match) {
+    const overlay = document.getElementById('found-overlay');
+    document.getElementById('found-overlay-bay').innerText = `Bay ${match.Bay}`;
+    document.getElementById('found-overlay-position').innerText = `Position ${match.Position || '--'}`;
+    document.getElementById('found-overlay-peg').innerText = match.Peg || 'R-- C--';
+    overlay.classList.remove('hidden');
+    setTimeout(() => overlay.classList.add('hidden'), 3000);
+}
+
+function showNotFoundOverlay() {
+    const overlay = document.getElementById('notfound-overlay');
+    overlay.classList.remove('hidden');
+    setTimeout(() => overlay.classList.add('hidden'), 3000);
 }
 
 function highlightItem(upc) {
-    // Remove any existing highlight
     document.querySelectorAll('.product-box.highlight').forEach(el => el.classList.remove('highlight'));
-    
     const box = document.querySelector(`.product-box[data-upc="${upc}"]`);
     if (box) {
         box.classList.add('highlight');
-        
-        // Keep flashing for 5 seconds, then stop (but stay visible)
         setTimeout(() => box.classList.remove('highlight'), 5000);
     }
 }
 
-// --- PRODUCT DETAIL MODAL ---
+// === DELETE CHECKING ===
+function checkForDelete(cleanUPC, cleanNoCheckDigit) {
+    if (!deleteData || deleteData.length === 0) return null;
+    const deletesInPOG = deleteData.filter(d => d.POG === currentPOG);
+    if (deletesInPOG.length === 0) return null;
+    
+    let match = deletesInPOG.find(d => d.CleanUPC === cleanUPC);
+    if (!match) match = deletesInPOG.find(d => d.CleanUPC === cleanNoCheckDigit);
+    if (!match) match = deletesInPOG.find(d => d.CleanUPC.slice(0, -1) === cleanUPC);
+    return match;
+}
+
+function showDeleteOverlay(upc, description) {
+    const overlay = document.getElementById('delete-overlay');
+    document.getElementById('delete-overlay-upc').innerText = upc;
+    document.getElementById('delete-overlay-desc').innerText = description;
+    overlay.classList.remove('hidden');
+    setTimeout(() => overlay.classList.add('hidden'), 4000);
+}
+
+// === PRODUCT DETAIL MODAL ===
 function openProductModal(box) {
     currentItemBox = box;
-    
     const item = JSON.parse(box.dataset.itemData);
     const imgSrc = box.dataset.imgSrc;
     const filenameDesc = box.dataset.filenameDesc;
+    const facingInfo = box.dataset.facingInfo;
     
-    // Populate modal - use filename description if available, otherwise fall back to CSV
     document.getElementById('detail-peg').innerText = item.Peg || `R-- C--`;
     document.getElementById('detail-position').innerText = item.Position || '--';
     document.getElementById('detail-upc').innerText = item.UPC || '--';
     document.getElementById('detail-desc').innerText = filenameDesc || item.ProductDescription || item.Description || '--';
     document.getElementById('detail-size').innerText = `${item.Width} × ${item.Height}`;
+    
+    const facingRow = document.getElementById('detail-facing-row');
+    if (facingInfo) {
+        document.getElementById('detail-facing').innerText = facingInfo;
+        facingRow.classList.remove('hidden');
+    } else {
+        facingRow.classList.add('hidden');
+    }
     
     const detailImg = document.getElementById('detail-image');
     if (imgSrc) {
@@ -635,24 +770,16 @@ function openProductModal(box) {
         detailImg.style.display = 'none';
     }
     
-    // Update button state based on completion
     const isCompleted = box.classList.contains('completed');
     const setBtn = document.getElementById('btn-set-item');
-    if (isCompleted) {
-        setBtn.innerText = '↩ UNSET';
-        setBtn.style.background = '#666';
-    } else {
-        setBtn.innerText = '✓ SET COMPLETE';
-        setBtn.style.background = '';
-    }
+    setBtn.innerText = isCompleted ? '↩ UNSET' : '✓ SET COMPLETE';
+    setBtn.style.background = isCompleted ? '#666' : '';
     
     document.getElementById('product-modal').classList.remove('hidden');
 }
 
 function closeProductModal(event) {
-    // If called from overlay click, only close if clicking the overlay itself
     if (event && event.target.id !== 'product-modal') return;
-    
     document.getElementById('product-modal').classList.add('hidden');
     currentItemBox = null;
 }
@@ -665,81 +792,78 @@ function setItemComplete() {
     const currentItem = JSON.parse(currentItemBox.dataset.itemData);
     const currentPosition = parseInt(currentItem.Position) || 0;
     
+    const currentPegMatch = currentItem.Peg ? currentItem.Peg.match(/R(\d+)/) : null;
+    const currentRow = currentPegMatch ? parseInt(currentPegMatch[1]) : 0;
+    
     if (isCompleted) {
-        // Unset - remove from completed
         completedItems.delete(upc);
         currentItemBox.classList.remove('completed');
         localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
-        
-        // Update progress
         const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
         const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
         updateProgress(items, done);
-        
-        // Just close the modal when unsetting
         document.getElementById('product-modal').classList.add('hidden');
         currentItemBox = null;
     } else {
-        // Set complete
+        playCompleteSound();
         completedItems.add(upc);
         currentItemBox.classList.add('completed');
         localStorage.setItem('harpa_complete', JSON.stringify([...completedItems]));
         
-        // Update progress
         const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
         const done = items.filter(i => completedItems.has(i.CleanUPC)).length;
         updateProgress(items, done);
         
-        // Find next item by position number
         const nextPosition = currentPosition + 1;
         const nextBox = findProductBoxByPosition(nextPosition);
         
         if (nextBox) {
-            // Auto-advance to next item
+            const nextItem = JSON.parse(nextBox.dataset.itemData);
+            const nextPegMatch = nextItem.Peg ? nextItem.Peg.match(/R(\d+)/) : null;
+            const nextRow = nextPegMatch ? parseInt(nextPegMatch[1]) : 0;
+            
+            if (nextRow > currentRow) {
+                playRowChangeSound();
+                showRowChangeToast(nextRow);
+            }
+            
             currentItemBox = null;
             openProductModal(nextBox);
         } else {
-            // No next item, close modal
             document.getElementById('product-modal').classList.add('hidden');
             currentItemBox = null;
+            checkBayCompletion(items, done);
         }
     }
 }
 
-// Helper function to find product box by position number
+function showRowChangeToast(row) {
+    document.getElementById('row-toast-text').innerText = `⬇️ Moving to Row ${row}`;
+    document.getElementById('row-toast').classList.remove('hidden');
+    setTimeout(() => document.getElementById('row-toast').classList.add('hidden'), 2000);
+}
+
 function findProductBoxByPosition(position) {
     const boxes = document.querySelectorAll('.product-box');
     for (const box of boxes) {
         try {
             const itemData = JSON.parse(box.dataset.itemData);
-            if (parseInt(itemData.Position) === position) {
-                return box;
-            }
-        } catch (e) {
-            continue;
-        }
+            if (parseInt(itemData.Position) === position) return box;
+        } catch (e) { }
     }
     return null;
 }
 
-// Skip to next unset item in the bay
 function skipToNextUnset() {
-    if (!currentItemBox) {
-        closeProductModal();
-        return;
-    }
+    if (!currentItemBox) { closeProductModal(); return; }
     
     const currentItem = JSON.parse(currentItemBox.dataset.itemData);
     const currentPosition = parseInt(currentItem.Position) || 0;
     
-    // Get all items in current bay sorted by position
     const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
     const sortedItems = items.sort((a, b) => (parseInt(a.Position) || 0) - (parseInt(b.Position) || 0));
     
-    // Find next unset item after current position
     let nextUnsetBox = null;
-    
-    // First, look for items after current position
     for (const item of sortedItems) {
         const pos = parseInt(item.Position) || 0;
         if (pos > currentPosition && !completedItems.has(item.CleanUPC)) {
@@ -748,7 +872,6 @@ function skipToNextUnset() {
         }
     }
     
-    // If nothing found after, wrap around to beginning
     if (!nextUnsetBox) {
         for (const item of sortedItems) {
             const pos = parseInt(item.Position) || 0;
@@ -759,100 +882,138 @@ function skipToNextUnset() {
         }
     }
     
-    if (nextUnsetBox) {
-        currentItemBox = null;
-        openProductModal(nextUnsetBox);
-    } else {
-        // All items are set, close modal
-        document.getElementById('product-modal').classList.add('hidden');
-        currentItemBox = null;
+    if (nextUnsetBox) { currentItemBox = null; openProductModal(nextUnsetBox); }
+    else closeProductModal();
+}
+
+// === CELEBRATION SYSTEM ===
+function checkBayCompletion(items, done) {
+    if (items.length === 0) return;
+    const bayKey = `${currentPOG}-${currentBay}`;
+    
+    if (done === items.length && !bayCompletionShown.has(bayKey)) {
+        bayCompletionShown.add(bayKey);
+        playCelebrationSound();
+        showBayCompleteCelebration();
+        setTimeout(() => checkPogCompletion(), 3500);
     }
 }
 
-// --- SWIPE NAVIGATION (Swipe + Hold) ---
-function setupSwipe() {
-    let xDown = null;
-    let swipeDirection = 0;
-    let holdTimer = null;
-    let swipeTriggered = false;
-    const canvas = document.getElementById('main-canvas');
-    const HOLD_DURATION = 400; // ms to hold after swipe
-    const SWIPE_THRESHOLD = 60; // px minimum swipe distance
-    
-    canvas.addEventListener('touchstart', (evt) => {
-        xDown = evt.touches[0].clientX;
-        swipeDirection = 0;
-        swipeTriggered = false;
-        clearTimeout(holdTimer);
-    }, { passive: true });
-
-    canvas.addEventListener('touchmove', (evt) => {
-        if (!xDown || swipeTriggered) return;
-        
-        const xCurrent = evt.touches[0].clientX;
-        const xDiff = xDown - xCurrent;
-        
-        // Check if swipe threshold reached
-        if (Math.abs(xDiff) > SWIPE_THRESHOLD) {
-            const newDirection = xDiff > 0 ? 1 : -1;
-            
-            // If direction changed or just started, reset timer
-            if (newDirection !== swipeDirection) {
-                swipeDirection = newDirection;
-                clearTimeout(holdTimer);
-                
-                // Start hold timer
-                holdTimer = setTimeout(() => {
-                    if (swipeDirection !== 0 && !swipeTriggered) {
-                        swipeTriggered = true;
-                        // Vibrate if available
-                        if (navigator.vibrate) navigator.vibrate(50);
-                        changeBay(swipeDirection);
-                    }
-                }, HOLD_DURATION);
-            }
-        }
-    }, { passive: true });
-
-    canvas.addEventListener('touchend', () => {
-        xDown = null;
-        swipeDirection = 0;
-        clearTimeout(holdTimer);
-    }, { passive: true });
-    
-    canvas.addEventListener('touchcancel', () => {
-        xDown = null;
-        swipeDirection = 0;
-        clearTimeout(holdTimer);
-    }, { passive: true });
+function showBayCompleteCelebration() {
+    document.getElementById('bay-complete-text').innerText = `Bay ${currentBay} is done!`;
+    document.getElementById('bay-complete-overlay').classList.remove('hidden');
+    setTimeout(() => document.getElementById('bay-complete-overlay').classList.add('hidden'), 3500);
 }
 
-// --- PDF VIEWER ---
+function checkPogCompletion() {
+    if (pogCompleteShown) return;
+    const allItems = pogData.filter(i => i.POG === currentPOG);
+    const allDone = allItems.filter(i => completedItems.has(i.CleanUPC)).length;
+    
+    if (allDone === allItems.length && allItems.length > 0) {
+        pogCompleteShown = true;
+        playPogCompleteSound();
+        showPogCompleteCelebration(allItems.length);
+    }
+}
+
+function showPogCompleteCelebration(totalItems) {
+    document.getElementById('pog-complete-text').innerText = `All ${totalItems} items complete!`;
+    document.getElementById('pog-complete-overlay').classList.remove('hidden');
+    startConfetti();
+    setTimeout(() => { document.getElementById('pog-complete-overlay').classList.add('hidden'); stopConfetti(); }, 5000);
+}
+
+let confettiAnimation = null;
+function startConfetti() {
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    const pieces = [];
+    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffd700'];
+    for (let i = 0; i < 150; i++) {
+        pieces.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height - canvas.height,
+            size: Math.random() * 10 + 5,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            speedY: Math.random() * 3 + 2,
+            speedX: Math.random() * 2 - 1,
+            rotation: Math.random() * 360
+        });
+    }
+    
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pieces.forEach(p => {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rotation * Math.PI / 180);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 0.6);
+            ctx.restore();
+            p.y += p.speedY; p.x += p.speedX; p.rotation += 5;
+            if (p.y > canvas.height) { p.y = -p.size; p.x = Math.random() * canvas.width; }
+        });
+        confettiAnimation = requestAnimationFrame(animate);
+    }
+    animate();
+}
+
+function stopConfetti() {
+    if (confettiAnimation) cancelAnimationFrame(confettiAnimation);
+    confettiAnimation = null;
+    const canvas = document.getElementById('confetti-canvas');
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// === MINI-MAP ===
+function openMinimap() {
+    const modal = document.getElementById('minimap-modal');
+    const container = document.getElementById('minimap-bays');
+    container.innerHTML = '';
+    
+    const allItems = pogData.filter(i => i.POG === currentPOG);
+    const allDone = allItems.filter(i => completedItems.has(i.CleanUPC)).length;
+    const allPct = allItems.length > 0 ? Math.round((allDone / allItems.length) * 100) : 0;
+    
+    document.getElementById('minimap-total-progress').innerText = `${allDone}/${allItems.length} items`;
+    document.getElementById('minimap-percent').innerText = `${allPct}%`;
+    
+    allBays.forEach(bayNum => {
+        const bayItems = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === bayNum);
+        const bayDone = bayItems.filter(i => completedItems.has(i.CleanUPC)).length;
+        const bayPct = bayItems.length > 0 ? Math.round((bayDone / bayItems.length) * 100) : 0;
+        
+        const card = document.createElement('div');
+        card.className = 'minimap-bay';
+        if (bayNum === currentBay) card.classList.add('current');
+        if (bayPct === 100) card.classList.add('complete');
+        else if (bayPct > 0) card.classList.add('in-progress');
+        
+        card.innerHTML = `<div class="minimap-bay-number">${bayNum}</div><div class="minimap-bay-progress">${bayDone}/${bayItems.length}</div>`;
+        card.onclick = () => { closeMinimap(); loadBay(bayNum, true); };
+        container.appendChild(card);
+    });
+    
+    modal.classList.remove('hidden');
+}
+
+function closeMinimap(event) {
+    if (event && event.target.id !== 'minimap-modal') return;
+    document.getElementById('minimap-modal').classList.add('hidden');
+}
+
+// === PDF VIEWER ===
 function openPDF() {
-    if (!currentPOG) {
-        alert("Select a store first");
-        return;
-    }
-    
-    const pdf = fileIndex.find(f => f.includes(currentPOG) && f.toLowerCase().endsWith('.pdf'));
-    if (pdf) {
-        document.getElementById('pdf-frame').src = pdf;
-        document.getElementById('pdf-modal').classList.remove('hidden');
-    } else {
-        alert("PDF not found for this planogram.");
-    }
+    const pdfName = `pog_${currentPOG}.pdf`;
+    document.getElementById('pdf-frame').src = pdfName;
+    document.getElementById('pdf-modal').classList.remove('hidden');
 }
 
 function closePDF() {
     document.getElementById('pdf-modal').classList.add('hidden');
-    document.getElementById('pdf-frame').src = "";
-}
-
-// --- UTILITY ---
-function clearAllProgress() {
-    if (confirm("Clear ALL progress for this planogram?")) {
-        completedItems.clear();
-        localStorage.removeItem('harpa_complete');
-        loadBay(currentBay);
-    }
+    document.getElementById('pdf-frame').src = '';
 }
