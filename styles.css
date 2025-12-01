@@ -546,19 +546,17 @@ header.collapsed {
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: background 0.2s, transform 0.1s;
 }
 .float-btn:active {
     background: rgba(0, 94, 184, 0.85);
-    transform: scale(0.95);
 }
+.float-btn.hidden { display: none; }
 .float-btn .expand-arrow,
 .float-btn .float-icon {
     font-size: 1.4rem;
     display: block;
 }
-
-/* Navigation arrows on floating buttons */
+/* Nav arrow buttons */
 .float-nav-btn {
     background: rgba(0, 150, 136, 0.63);
     min-width: 45px;
@@ -566,9 +564,6 @@ header.collapsed {
 }
 .float-nav-btn:active {
     background: rgba(0, 150, 136, 0.85);
-}
-.float-nav-btn.hidden {
-    display: none;
 }
 
 /* --- Main Canvas --- */
