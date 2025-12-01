@@ -98,6 +98,151 @@ body.large-font-mode .btn-close-detail { font-size: 1.1rem; padding: 14px; }
 .pdf-card .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .pdf-card iframe { flex: 1; border: none; border-radius: 4px; }
 
+/* Help Button */
+.btn-help {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+    transition: all 0.2s;
+    z-index: 10;
+}
+.btn-help:hover { transform: translateY(-50%) scale(1.1); }
+.btn-help:active { transform: translateY(-50%) scale(0.95); }
+
+/* Help Modal */
+.help-card {
+    width: 95%;
+    max-width: 450px;
+    max-height: 90vh;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.help-header {
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.help-header h2 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+.btn-close-help {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btn-close-help:hover { background: rgba(255,255,255,0.3); }
+
+.help-section {
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+}
+.help-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: #333;
+}
+.help-link {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.2s;
+}
+.help-link:hover {
+    background: #e3f2fd;
+    transform: translateX(5px);
+}
+.help-link-icon {
+    font-size: 1.5rem;
+    margin-right: 12px;
+}
+.help-link-text {
+    font-weight: 500;
+}
+
+.help-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.help-input, .help-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+.help-input:focus, .help-textarea:focus {
+    outline: none;
+    border-color: #2196F3;
+}
+.help-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+.btn-submit-help {
+    background: linear-gradient(135deg, #43A047, #2E7D32);
+    color: white;
+    border: none;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-submit-help:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(67, 160, 71, 0.4);
+}
+.btn-submit-help:active {
+    transform: translateY(0);
+}
+
+.help-footer {
+    padding: 12px 20px;
+    background: #f9f9f9;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #666;
+}
+.help-footer a {
+    color: #2196F3;
+    text-decoration: none;
+}
+.help-footer a:hover {
+    text-decoration: underline;
+}
+
 /* --- PRODUCT DETAIL MODAL --- */
 .product-detail-card {
     background: white;
@@ -282,7 +427,7 @@ header.collapsed {
     position: absolute;
 }
 
-.header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; position: relative; padding-left: 45px; }
 .store-info h1 { font-size: 1.1rem; color: var(--primary); margin-bottom: 2px; }
 .store-info span { font-size: 0.75rem; color: var(--gray); }
 .header-btns { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
