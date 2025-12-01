@@ -486,10 +486,47 @@ header.collapsed {
 .progress-fill { background: var(--success); height: 100%; width: 0%; transition: width 0.3s; }
 .progress-text { text-align: right; font-size: 0.7rem; color: var(--gray); margin-top: 2px; }
 
+/* --- Floating Progress Bar --- */
+.floating-progress {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 8px 15px;
+    border-radius: 20px;
+    min-width: 200px;
+}
+.floating-progress.hidden { display: none; }
+.floating-progress-bar-bg {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.3);
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.floating-progress-fill {
+    background: var(--success);
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s;
+}
+.floating-progress-text {
+    color: white;
+    font-size: 0.75rem;
+    font-weight: bold;
+    min-width: 50px;
+    text-align: right;
+}
+
 /* --- Floating Buttons --- */
 .floating-btns {
     position: fixed;
-    top: 10px;
+    top: 50px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 100;
@@ -498,7 +535,7 @@ header.collapsed {
 }
 .floating-btns.hidden { display: none; }
 .float-btn {
-    background: rgba(0, 94, 184, 0.9);
+    background: rgba(0, 94, 184, 0.63);
     color: white;
     border: none;
     border-radius: 0 0 12px 12px;
@@ -509,11 +546,29 @@ header.collapsed {
     display: flex;
     justify-content: center;
     align-items: center;
+    transition: background 0.2s, transform 0.1s;
+}
+.float-btn:active {
+    background: rgba(0, 94, 184, 0.85);
+    transform: scale(0.95);
 }
 .float-btn .expand-arrow,
 .float-btn .float-icon {
     font-size: 1.4rem;
     display: block;
+}
+
+/* Navigation arrows on floating buttons */
+.float-nav-btn {
+    background: rgba(0, 150, 136, 0.63);
+    min-width: 45px;
+    padding: 8px 12px 12px 12px;
+}
+.float-nav-btn:active {
+    background: rgba(0, 150, 136, 0.85);
+}
+.float-nav-btn.hidden {
+    display: none;
 }
 
 /* --- Main Canvas --- */
