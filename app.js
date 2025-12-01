@@ -1104,3 +1104,62 @@ function closePDF() {
     if (pdfModal) pdfModal.classList.add('hidden');
     if (pdfFrame) pdfFrame.src = '';
 }
+
+// === HELP & SUPPORT ===
+function openHelp() {
+    document.getElementById('help-modal').classList.remove('hidden');
+    // Pre-fill store number if available
+    const storeInput = document.getElementById('help-store');
+    if (storeInput && currentStore) {
+        storeInput.value = currentStore;
+    }
+}
+
+function closeHelp() {
+    document.getElementById('help-modal').classList.add('hidden');
+}
+
+function submitHelpForm() {
+    const name = document.getElementById('help-name').value.trim();
+    const store = document.getElementById('help-store').value.trim();
+    const issueType = document.getElementById('help-type').value;
+    const message = document.getElementById('help-message').value.trim();
+    
+    // Validate
+    if (!name || !store || !issueType || !message) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    // Build email
+    const subject = encodeURIComponent(`PEGASUS ${issueType} - Store ${store}`);
+    const body = encodeURIComponent(
+`PEGASUS Feedback/Support Request
+================================
+
+Name: ${name}
+Store: ${store}
+Issue Type: ${issueType}
+POG: ${currentPOG || 'N/A'}
+
+Message:
+${message}
+
+--------------------------------
+Sent from PEGASUS App`
+    );
+    
+    // Open mail client
+    window.location.href = `mailto:tyson.gauthier@retailodyssey.com?subject=${subject}&body=${body}`;
+    
+    // Show confirmation and clear form
+    showToast('Opening email client...', 2000);
+    
+    // Clear form after short delay
+    setTimeout(() => {
+        document.getElementById('help-name').value = '';
+        document.getElementById('help-type').value = '';
+        document.getElementById('help-message').value = '';
+        closeHelp();
+    }, 1000);
+}
