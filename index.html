@@ -16,7 +16,8 @@
     <!-- Modal: Loading -->
     <div id="loading-overlay" class="modal-overlay">
         <div class="modal-card">
-            <img src="PEGASUS_Application_Logo.png" alt="PEGASUS" class="app-logo">
+            <img src="PEGASUS_Application_Logo.png" alt="PEGASUS" class="app-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <h2 style="display:none; color: var(--primary);">🐴 PEGASUS</h2>
             <div class="spinner"></div>
             <h3>Initializing PEGASUS...</h3>
             <p style="font-size: 0.75rem; color: #888; margin-top: 8px;">Planogram Execution Guide And Store User Support</p>
@@ -26,7 +27,8 @@
     <!-- Modal: Store Selection -->
     <div id="store-modal" class="modal-overlay hidden">
         <div class="modal-card">
-            <img src="PEGASUS_Application_Logo.png" alt="PEGASUS" class="app-logo">
+            <img src="PEGASUS_Application_Logo.png" alt="PEGASUS" class="app-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <h2 style="display:none; color: var(--primary);">🐴 PEGASUS</h2>
             <p style="font-size: 0.8rem; color: #666; margin-bottom: 15px;">Select Your Store</p>
             <input type="number" id="store-input" class="input-box" placeholder="Enter Store #">
             <button id="btn-load-store" class="btn-primary">Load Planogram</button>
@@ -49,6 +51,50 @@
                 <button onclick="closePDF()" class="btn-secondary">Close</button>
             </div>
             <iframe id="pdf-frame"></iframe>
+        </div>
+    </div>
+
+    <!-- Modal: Help & Support -->
+    <div id="help-modal" class="modal-overlay hidden">
+        <div class="modal-card help-card">
+            <div class="help-header">
+                <h2>❓ Help & Support</h2>
+                <button onclick="closeHelp()" class="btn-close-help">✕</button>
+            </div>
+            
+            <div class="help-section">
+                <h3>📚 Resources</h3>
+                <a href="PEGASUS_User_Guide.pdf" target="_blank" class="help-link">
+                    <span class="help-link-icon">📄</span>
+                    <span class="help-link-text">PEGASUS User Guide (PDF)</span>
+                </a>
+                <a href="https://drive.google.com/file/d/1R_BfdU_q27weWqKnQ8rPoT9p14deR-rb/view?usp=sharing" target="_blank" class="help-link">
+                    <span class="help-link-icon">🎬</span>
+                    <span class="help-link-text">Video Tutorial</span>
+                </a>
+            </div>
+            
+            <div class="help-section">
+                <h3>📧 Submit Feedback / Get Help</h3>
+                <form id="help-form" class="help-form">
+                    <input type="text" id="help-name" placeholder="Your Name" class="help-input" required>
+                    <input type="text" id="help-store" placeholder="Store Number" class="help-input" required>
+                    <select id="help-type" class="help-input" required>
+                        <option value="">Select Issue Type...</option>
+                        <option value="Bug Report">Bug Report</option>
+                        <option value="Feature Request">Feature Request</option>
+                        <option value="Question">Question</option>
+                        <option value="General Feedback">General Feedback</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <textarea id="help-message" placeholder="Describe your issue or feedback..." class="help-textarea" rows="4" required></textarea>
+                    <button type="button" onclick="submitHelpForm()" class="btn-submit-help">📧 Submit Feedback</button>
+                </form>
+            </div>
+            
+            <div class="help-footer">
+                <p>Direct Email: <a href="mailto:tyson.gauthier@retailodyssey.com">tyson.gauthier@retailodyssey.com</a></p>
+            </div>
         </div>
     </div>
 
@@ -109,6 +155,9 @@
 
     <!-- FLOATING BUTTONS (shown when header collapsed) -->
     <div id="floating-btns" class="floating-btns hidden">
+        <button id="btn-float-help" class="float-btn" onclick="openHelp()" title="Help & Support">
+            <span class="float-icon">❓</span>
+        </button>
         <button id="btn-float-scan" class="float-btn" onclick="startScanner()" title="Scan Barcode">
             <span class="float-icon">🔍</span>
         </button>
@@ -194,6 +243,7 @@
     <!-- MAIN HEADER (collapsible) -->
     <header id="main-header">
         <div class="header-top">
+            <button onclick="openHelp()" class="btn-help" title="Help & Support">❓</button>
             <div class="store-info">
                 <h1 id="store-display">Store: --</h1>
                 <span id="pog-display">POG: --</span>
