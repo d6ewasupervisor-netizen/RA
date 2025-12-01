@@ -139,13 +139,13 @@ function toggleHeader() {
     
     if (headerCollapsed) {
         header.classList.add('collapsed');
-        floatingBtns.classList.remove('hidden');
-        floatingProgress.classList.remove('hidden');
+        if (floatingBtns) floatingBtns.classList.remove('hidden');
+        if (floatingProgress) floatingProgress.classList.remove('hidden');
         updateFloatingNavArrows();
     } else {
         header.classList.remove('collapsed');
-        floatingBtns.classList.add('hidden');
-        floatingProgress.classList.add('hidden');
+        if (floatingBtns) floatingBtns.classList.add('hidden');
+        if (floatingProgress) floatingProgress.classList.add('hidden');
     }
     setTimeout(() => { if (currentPOG && currentBay) renderGrid(currentBay); }, 350);
 }
@@ -155,7 +155,13 @@ function updateFloatingNavArrows() {
     const prevBtn = document.getElementById('btn-float-prev-bay');
     const nextBtn = document.getElementById('btn-float-next-bay');
     
-    if (!prevBtn || !nextBtn || allBays.length === 0) return;
+    // Exit if elements don't exist or no bays loaded
+    if (!prevBtn || !nextBtn) return;
+    if (!allBays || allBays.length === 0) {
+        prevBtn.classList.add('hidden');
+        nextBtn.classList.add('hidden');
+        return;
+    }
     
     const idx = allBays.indexOf(currentBay);
     
@@ -319,8 +325,8 @@ function loadStoreLogic(storeNum) {
         const floatingProgress = document.getElementById('floating-progress');
         headerCollapsed = true;
         header.classList.add('collapsed');
-        floatingBtns.classList.remove('hidden');
-        floatingProgress.classList.remove('hidden');
+        if (floatingBtns) floatingBtns.classList.remove('hidden');
+        if (floatingProgress) floatingProgress.classList.remove('hidden');
         updateFloatingNavArrows();
     }
 }
