@@ -23,6 +23,7 @@ body.large-font-mode .product-box { font-size: 0.7rem; }
 body.large-font-mode .position-label { font-size: 11px; padding: 3px 6px; }
 body.large-font-mode .peg-label { font-size: 9px; }
 body.large-font-mode .detail-peg-display { font-size: 1.5rem; }
+body.large-font-mode .btn-prev-item,
 body.large-font-mode .btn-set, 
 body.large-font-mode .btn-skip,
 body.large-font-mode .btn-close-detail { font-size: 1.1rem; padding: 14px; }
@@ -329,6 +330,16 @@ body.large-font-mode .btn-close-detail { font-size: 1.1rem; padding: 14px; }
     gap: 8px;
     padding: 12px;
     background: #f5f5f5;
+}
+.btn-prev-item {
+    padding: 12px;
+    font-size: 0.95rem;
+    font-weight: bold;
+    background: #5C6BC0;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
 }
 .btn-set {
     padding: 12px;
