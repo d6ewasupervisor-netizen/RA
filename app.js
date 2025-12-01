@@ -85,53 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function init() {
-    // Event Bindings - set up first to ensure they work even if CSV load fails
-    const setupEventBindings = () => {
-        const btnLoadStore = document.getElementById('btn-load-store');
-        const storeInput = document.getElementById('store-input');
-        const btnScanToggle = document.getElementById('btn-scan-toggle');
-        const btnManualSearch = document.getElementById('btn-manual-search');
-        const searchInput = document.getElementById('search-input');
-        
-        if (btnLoadStore) {
-            btnLoadStore.onclick = () => loadStoreLogic(storeInput?.value?.trim());
-        }
-        
-        if (storeInput) {
-            storeInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') loadStoreLogic(storeInput.value.trim());
-            });
-        }
-        
-        if (btnScanToggle) btnScanToggle.onclick = startScanner;
-        
-        if (btnManualSearch) {
-            btnManualSearch.onclick = () => {
-                handleSearchOrScan(searchInput?.value?.trim(), false);
-                if (searchInput) searchInput.value = '';
-            };
-        }
-        
-        if (searchInput) {
-            searchInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    handleSearchOrScan(searchInput.value.trim(), false);
-                    searchInput.value = '';
-                }
-            });
-        }
-    };
-    
-    setupEventBindings();
-    
     try {
-        // Add timeout to prevent infinite loading
-        const loadPromise = loadCSVData();
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Loading timeout - CSV files may be unavailable')), 10000)
-        );
-        
-        await Promise.race([loadPromise, timeoutPromise]);
+        await loadCSVData();
         document.getElementById('loading-overlay').classList.add('hidden');
         
         const savedStore = localStorage.getItem('harpa_store');
@@ -146,10 +101,33 @@ async function init() {
             <div class="modal-card">
                 <h3>⚠️ Data Load Error</h3>
                 <p style="color:#666; margin:10px 0;">${e.message}</p>
-                <button onclick="location.reload()" class="btn-primary" style="margin-top:15px;">Retry</button>
             </div>
         `;
     }
+
+    // Event Bindings
+    document.getElementById('btn-load-store').onclick = () => 
+        loadStoreLogic(document.getElementById('store-input').value.trim());
+    
+    document.getElementById('store-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') loadStoreLogic(document.getElementById('store-input').value.trim());
+    });
+    
+    document.getElementById('btn-scan-toggle').onclick = startScanner;
+    
+    document.getElementById('btn-manual-search').onclick = () => {
+        const input = document.getElementById('search-input');
+        handleSearchOrScan(input.value.trim(), false);
+        input.value = '';
+    };
+    
+    document.getElementById('search-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const input = document.getElementById('search-input');
+            handleSearchOrScan(input.value.trim(), false);
+            input.value = '';
+        }
+    });
 }
 
 // === HEADER COLLAPSE/EXPAND ===
@@ -161,12 +139,12 @@ function toggleHeader() {
     
     if (headerCollapsed) {
         header.classList.add('collapsed');
-        if (floatingBtns) floatingBtns.classList.remove('hidden');
+        floatingBtns.classList.remove('hidden');
         if (floatingProgress) floatingProgress.classList.remove('hidden');
         updateFloatingNavArrows();
     } else {
         header.classList.remove('collapsed');
-        if (floatingBtns) floatingBtns.classList.add('hidden');
+        floatingBtns.classList.add('hidden');
         if (floatingProgress) floatingProgress.classList.add('hidden');
     }
     setTimeout(() => { if (currentPOG && currentBay) renderGrid(currentBay); }, 350);
@@ -176,25 +154,18 @@ function toggleHeader() {
 function updateFloatingNavArrows() {
     const prevBtn = document.getElementById('btn-float-prev-bay');
     const nextBtn = document.getElementById('btn-float-next-bay');
-    
-    // Exit if elements don't exist or no bays loaded
     if (!prevBtn || !nextBtn) return;
-    if (!allBays || allBays.length === 0) {
-        prevBtn.classList.add('hidden');
-        nextBtn.classList.add('hidden');
-        return;
-    }
     
     const idx = allBays.indexOf(currentBay);
     
-    // Show/hide prev arrow (hide if on first bay)
+    // Hide prev if on first bay
     if (idx <= 0) {
         prevBtn.classList.add('hidden');
     } else {
         prevBtn.classList.remove('hidden');
     }
     
-    // Show/hide next arrow (hide if on last bay)
+    // Hide next if on last bay
     if (idx >= allBays.length - 1) {
         nextBtn.classList.add('hidden');
     } else {
@@ -227,27 +198,11 @@ function showToast(message, duration = 2000) {
 async function loadCSVData() {
     const ts = Date.now();
     
-    console.log('Loading CSV data...');
-    
-    // Helper function to fetch with timeout
-    const fetchWithTimeout = async (url, timeout = 8000) => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-        try {
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            return response;
-        } catch (e) {
-            clearTimeout(timeoutId);
-            throw e;
-        }
-    };
-    
     const [filesResp, pogsResp, mapsResp, deletesResp] = await Promise.all([
-        fetchWithTimeout(`githubfiles.csv?t=${ts}`),
-        fetchWithTimeout(`allplanogramdata.csv?t=${ts}`),
-        fetchWithTimeout(`Store_POG_Mapping.csv?t=${ts}`),
-        fetchWithTimeout(`Deletes.csv?t=${ts}`).catch(() => null)
+        fetch(`githubfiles.csv?t=${ts}`),
+        fetch(`allplanogramdata.csv?t=${ts}`),
+        fetch(`Store_POG_Mapping.csv?t=${ts}`),
+        fetch(`Deletes.csv?t=${ts}`).catch(() => null)
     ]);
     
     if (!filesResp.ok) throw new Error("githubfiles.csv not found");
@@ -363,7 +318,7 @@ function loadStoreLogic(storeNum) {
         const floatingProgress = document.getElementById('floating-progress');
         headerCollapsed = true;
         header.classList.add('collapsed');
-        if (floatingBtns) floatingBtns.classList.remove('hidden');
+        floatingBtns.classList.remove('hidden');
         if (floatingProgress) floatingProgress.classList.remove('hidden');
         updateFloatingNavArrows();
     }
@@ -536,8 +491,6 @@ function addPositionLabel(box, position) {
 function updateProgress(items, doneCount) {
     const total = items.length;
     const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
-    
-    // Update header progress bar
     document.getElementById('progress-fill').style.width = `${pct}%`;
     document.getElementById('progress-count').innerText = `${doneCount}/${total}`;
     
