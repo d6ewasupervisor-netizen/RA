@@ -438,7 +438,7 @@ header.collapsed {
     position: absolute;
 }
 
-.header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; position: relative; padding-left: 45px; }
+.header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; position: relative; padding-left: 50px; }
 .store-info h1 { font-size: 1.1rem; color: var(--primary); margin-bottom: 2px; }
 .store-info span { font-size: 0.75rem; color: var(--gray); }
 .header-btns { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
