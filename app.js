@@ -134,16 +134,44 @@ async function init() {
 function toggleHeader() {
     const header = document.getElementById('main-header');
     const floatingBtns = document.getElementById('floating-btns');
+    const floatingProgress = document.getElementById('floating-progress');
     headerCollapsed = !headerCollapsed;
     
     if (headerCollapsed) {
         header.classList.add('collapsed');
         floatingBtns.classList.remove('hidden');
+        floatingProgress.classList.remove('hidden');
+        updateFloatingNavArrows();
     } else {
         header.classList.remove('collapsed');
         floatingBtns.classList.add('hidden');
+        floatingProgress.classList.add('hidden');
     }
     setTimeout(() => { if (currentPOG && currentBay) renderGrid(currentBay); }, 350);
+}
+
+// === UPDATE FLOATING NAV ARROWS ===
+function updateFloatingNavArrows() {
+    const prevBtn = document.getElementById('btn-float-prev-bay');
+    const nextBtn = document.getElementById('btn-float-next-bay');
+    
+    if (!prevBtn || !nextBtn || allBays.length === 0) return;
+    
+    const idx = allBays.indexOf(currentBay);
+    
+    // Show/hide prev arrow (hide if on first bay)
+    if (idx <= 0) {
+        prevBtn.classList.add('hidden');
+    } else {
+        prevBtn.classList.remove('hidden');
+    }
+    
+    // Show/hide next arrow (hide if on last bay)
+    if (idx >= allBays.length - 1) {
+        nextBtn.classList.add('hidden');
+    } else {
+        nextBtn.classList.remove('hidden');
+    }
 }
 
 // === FONT SIZE TOGGLE ===
@@ -288,9 +316,12 @@ function loadStoreLogic(storeNum) {
         // Start with header collapsed
         const header = document.getElementById('main-header');
         const floatingBtns = document.getElementById('floating-btns');
+        const floatingProgress = document.getElementById('floating-progress');
         headerCollapsed = true;
         header.classList.add('collapsed');
         floatingBtns.classList.remove('hidden');
+        floatingProgress.classList.remove('hidden');
+        updateFloatingNavArrows();
     }
 }
 
@@ -461,8 +492,16 @@ function addPositionLabel(box, position) {
 function updateProgress(items, doneCount) {
     const total = items.length;
     const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+    
+    // Update header progress bar
     document.getElementById('progress-fill').style.width = `${pct}%`;
     document.getElementById('progress-count').innerText = `${doneCount}/${total}`;
+    
+    // Update floating progress bar
+    const floatingFill = document.getElementById('floating-progress-fill');
+    const floatingCount = document.getElementById('floating-progress-count');
+    if (floatingFill) floatingFill.style.width = `${pct}%`;
+    if (floatingCount) floatingCount.innerText = `${doneCount}/${total}`;
 }
 
 // === BAY NAVIGATION ===
@@ -475,6 +514,7 @@ function changeBay(dir) {
         currentBay = allBays[newIdx];
         showBayOverlay(currentBay);
         renderGrid(currentBay);
+        updateFloatingNavArrows();
     }
 }
 
@@ -483,6 +523,7 @@ function loadBay(bayNum, showOverlay = false) {
     currentBay = bayNum;
     if (showOverlay) showBayOverlay(currentBay);
     renderGrid(currentBay);
+    updateFloatingNavArrows();
 }
 
 function showBayOverlay(bayNum) {
