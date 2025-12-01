@@ -93,7 +93,7 @@
             </div>
             
             <div class="help-footer">
-                <p>Direct Email: <a href="mailto:tyson.gauthier@retailodyssey.com">tyson.gauthier@retailodyssey.com</a></p>
+                <p>Direct Email: <a href="/cdn-cgi/l/email-protection#e19598928e8fcf8680949589888493a193849580888d8e859892928498cf828e8c"><span class="__cf_email__" data-cfemail="116568627e7f3f76706465797874635163746570787d7e7568626274683f727e7c">[email&#160;protected]</span></a></p>
             </div>
         </div>
     </div>
@@ -154,8 +154,19 @@
         </div>
     </div>
 
+    <!-- FLOATING PROGRESS BAR (shown when header collapsed) -->
+    <div id="floating-progress" class="floating-progress hidden">
+        <div class="floating-progress-bar-bg">
+            <div id="floating-progress-fill" class="floating-progress-fill"></div>
+        </div>
+        <span id="floating-progress-count" class="floating-progress-text">0/0</span>
+    </div>
+
     <!-- FLOATING BUTTONS (shown when header collapsed) -->
     <div id="floating-btns" class="floating-btns hidden">
+        <button id="btn-float-prev-bay" class="float-btn float-nav-btn" onclick="changeBay(-1)" title="Previous Bay">
+            <span class="float-icon">◀</span>
+        </button>
         <button id="btn-float-help" class="float-btn" onclick="openHelp()" title="Help & Support">
             <span class="float-icon">❓</span>
         </button>
@@ -173,6 +184,9 @@
         </button>
         <button id="btn-expand" class="float-btn" onclick="toggleHeader()" title="Expand Menu">
             <span class="expand-arrow">▼</span>
+        </button>
+        <button id="btn-float-next-bay" class="float-btn float-nav-btn" onclick="changeBay(1)" title="Next Bay">
+            <span class="float-icon">▶</span>
         </button>
     </div>
 
@@ -283,12 +297,3 @@
         </div>
         <div class="progress-text"><span id="progress-count">0/0</span> Complete</div>
     </header>
-
-    <!-- PEGBOARD CANVAS -->
-    <main id="main-canvas">
-        <div id="grid-container"></div>
-    </main>
-
-    <script src="app.js"></script>
-</body>
-</html>
