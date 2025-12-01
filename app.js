@@ -917,6 +917,40 @@ function findProductBoxByPosition(position) {
     return null;
 }
 
+function goToPreviousItem() {
+    if (!currentItemBox) { closeProductModal(); return; }
+    
+    const currentItem = JSON.parse(currentItemBox.dataset.itemData);
+    const currentPosition = parseInt(currentItem.Position) || 0;
+    
+    const items = pogData.filter(i => i.POG === currentPOG && parseInt(i.Bay) === currentBay);
+    const sortedItems = items.sort((a, b) => (parseInt(a.Position) || 0) - (parseInt(b.Position) || 0));
+    
+    // Find the previous item by position (regardless of completion status)
+    let prevBox = null;
+    for (let i = sortedItems.length - 1; i >= 0; i--) {
+        const pos = parseInt(sortedItems[i].Position) || 0;
+        if (pos < currentPosition) {
+            prevBox = findProductBoxByPosition(pos);
+            if (prevBox) break;
+        }
+    }
+    
+    // If no previous item in this bay, wrap to the last item
+    if (!prevBox) {
+        for (let i = sortedItems.length - 1; i >= 0; i--) {
+            const pos = parseInt(sortedItems[i].Position) || 0;
+            if (pos !== currentPosition) {
+                prevBox = findProductBoxByPosition(pos);
+                if (prevBox) break;
+            }
+        }
+    }
+    
+    if (prevBox) { currentItemBox = null; openProductModal(prevBox); }
+    else closeProductModal();
+}
+
 function skipToNextUnset() {
     if (!currentItemBox) { closeProductModal(); return; }
     
